@@ -2882,6 +2882,7 @@ if(CLIENT)
     components/tclient/custom_communities.h
     components/tclient/data_version.h
     components/tclient/despite_antiping.h
+    components/tclient/despite_button_motion.h
     components/tclient/despite_theme.h
     components/tclient/menus_despite.cpp
     components/tclient/menus_tclient.cpp

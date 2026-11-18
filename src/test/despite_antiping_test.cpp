@@ -1,4 +1,5 @@
 #include <game/client/components/tclient/despite_antiping.h>
+#include <game/client/components/tclient/despite_button_motion.h>
 
 #include <gtest/gtest.h>
 
@@ -198,4 +199,76 @@ TEST(DespiteBlend, ZeroElapsedTimeHoldsBlendAndAxesNeverOvershoot)
 		EXPECT_GE(Result.y, 0.0f);
 		EXPECT_LE(Result.y, 1.0f);
 	}
+}
+
+// Catch instant hover switches, snapping on reversal, FPS-dependent timing,
+// missing press feedback and invalid elapsed time poisoning the visual state.
+TEST(DespiteButton, HoverGrowsGraduallyAndExitSettlesBack)
+{
+	CDespiteButtonMotion Motion;
+	Motion.Update(true, false, 1.0f / 60.0f);
+	const float First = Motion.Scale(0.045f);
+	EXPECT_GT(First, 1.0f);
+	EXPECT_LT(First, 1.045f);
+	Motion.Update(false, false, 1.0f / 60.0f);
+	EXPECT_LT(Motion.Scale(0.045f), First);
+	EXPECT_GT(Motion.Scale(0.045f), 1.0f);
+	for(int Frame = 0; Frame < 120; ++Frame)
+		Motion.Update(false, false, 1.0f / 60.0f);
+	EXPECT_NEAR(Motion.Scale(0.045f), 1.0f, 0.00001f);
+}
+
+TEST(DespiteButton, ReenteringDuringExitReversesFromCurrentScale)
+{
+	CDespiteButtonMotion Motion;
+	for(int Frame = 0; Frame < 10; ++Frame)
+		Motion.Update(true, false, 1.0f / 60.0f);
+	const float BeforeExit = Motion.Scale(0.045f);
+	Motion.Update(false, false, 0.02f);
+	const float Leaving = Motion.Scale(0.045f);
+	EXPECT_LT(Leaving, BeforeExit);
+	Motion.Update(true, false, 0.01f);
+	EXPECT_GT(Motion.Scale(0.045f), Leaving);
+	EXPECT_LT(Motion.Scale(0.045f), 1.045f);
+}
+
+TEST(DespiteButton, EqualElapsedTimeIsIndependentOfFrameRate)
+{
+	CDespiteButtonMotion Slow, Fast;
+	for(int Frame = 0; Frame < 6; ++Frame)
+		Slow.Update(true, false, 1.0f / 60.0f);
+	for(int Frame = 0; Frame < 24; ++Frame)
+		Fast.Update(true, false, 1.0f / 240.0f);
+	EXPECT_NEAR(Slow.Scale(0.045f), Fast.Scale(0.045f), 0.00001f);
+	EXPECT_GT(Slow.Scale(0.045f), 1.0f);
+}
+
+TEST(DespiteButton, PressShrinksAndReleaseReturnsSmoothly)
+{
+	CDespiteButtonMotion Motion;
+	for(int Frame = 0; Frame < 60; ++Frame)
+		Motion.Update(true, false, 1.0f / 60.0f);
+	const float HoverScale = Motion.Scale(0.045f);
+	Motion.Update(true, true, 0.02f);
+	const float PressScale = Motion.Scale(0.045f);
+	EXPECT_LT(PressScale, HoverScale);
+	EXPECT_GT(Motion.Press(), 0.0f);
+	Motion.Update(true, false, 0.02f);
+	EXPECT_GT(Motion.Scale(0.045f), PressScale);
+	EXPECT_LT(Motion.Scale(0.045f), HoverScale);
+}
+
+TEST(DespiteButton, InvalidTimeHoldsStateAndLongFrameStaysBounded)
+{
+	CDespiteButtonMotion Motion;
+	Motion.Update(true, false, 0.02f);
+	const float Before = Motion.Scale(0.045f);
+	Motion.Update(false, true, -1.0f);
+	EXPECT_FLOAT_EQ(Motion.Scale(0.045f), Before);
+	Motion.Update(false, true, std::numeric_limits<float>::quiet_NaN());
+	EXPECT_FLOAT_EQ(Motion.Scale(0.045f), Before);
+	Motion.Update(true, false, 1000.0f);
+	EXPECT_TRUE(std::isfinite(Motion.Scale(0.045f)));
+	EXPECT_GE(Motion.Scale(0.045f), Before);
+	EXPECT_LE(Motion.Scale(0.045f), 1.045f);
 }

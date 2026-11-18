@@ -27,9 +27,9 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	Brand.VSplitLeft(9.0f, nullptr, &Brand);
 	TextRender()->TextColor(DespiteTheme::Text());
 	Ui()->DoLabel(&Brand, "Ðespiтe", 14.0f, TEXTALIGN_ML);
-	static CButtonContainer s_Quit;
+	static DespiteTheme::CButton s_Quit;
 	const bool Escape = Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE);
-	if(DespiteTheme::Button(Ui(), TextRender(), &s_Quit, Quit, Localize("Quit")) || Escape || CheckHotKey(KEY_Q))
+	if(DespiteTheme::Button(Ui(), TextRender(), &s_Quit, Quit, Localize("Quit"), false, FontIcon::XMARK) || Escape || CheckHotKey(KEY_Q))
 	{
 		if(Escape || GameClient()->Editor()->HasUnsavedData())
 			GameClient()->m_Menus.ShowQuitPopup();
@@ -47,10 +47,10 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	DespiteTheme::Surface(Panel, 24.0f);
 	CUIRect Grid, Top, Bottom, Settings, Demos, Editor, Server;
 	Panel.Margin(9.0f, &Grid);
-	Grid.HSplitMid(&Top, &Bottom, 5.0f);
-	Top.VSplitMid(&Settings, &Demos, 5.0f);
-	Bottom.VSplitMid(&Editor, &Server, 5.0f);
-	static CButtonContainer s_Settings, s_Demos, s_Editor, s_Server;
+	Grid.HSplitMid(&Top, &Bottom, 8.0f);
+	Top.VSplitMid(&Settings, &Demos, 8.0f);
+	Bottom.VSplitMid(&Editor, &Server, 8.0f);
+	static DespiteTheme::CButton s_Settings, s_Demos, s_Editor, s_Server;
 	int NewPage = -1;
 	if(DespiteTheme::Navigation(Ui(), TextRender(), &s_Settings, Settings, FontIcon::GEAR, Localize("Settings"), TCLocalize("Make it yours")) || CheckHotKey(KEY_S))
 		NewPage = CMenus::PAGE_SETTINGS;
@@ -72,14 +72,14 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 			GameClient()->m_LocalServer.RunServer({});
 	}
 
-	CUIRect Play = {CenterX - 73.0f, Panel.y + Panel.h + 25.0f, 146.0f, 38.0f};
-	static CButtonContainer s_Play;
-	if(DespiteTheme::Button(Ui(), TextRender(), &s_Play, Play, Localize("Play", "Start menu"), true) || Ui()->ConsumeHotkey(CUi::HOTKEY_ENTER) || CheckHotKey(KEY_P))
+	CUIRect Play = {CenterX - 77.0f, Panel.y + Panel.h + 25.0f, 154.0f, 40.0f};
+	static DespiteTheme::CButton s_Play;
+	if(DespiteTheme::Button(Ui(), TextRender(), &s_Play, Play, Localize("Play", "Start menu"), true, FontIcon::PLAY) || Ui()->ConsumeHotkey(CUi::HOTKEY_ENTER) || CheckHotKey(KEY_P))
 		NewPage = g_Config.m_UiPage >= CMenus::PAGE_INTERNET && g_Config.m_UiPage <= CMenus::PAGE_FAVORITE_COMMUNITY_5 ? g_Config.m_UiPage : CMenus::PAGE_INTERNET;
 
 	CUIRect Footer = {CenterX - 160.0f, MainView.y + MainView.h - 32.0f, 320.0f, 22.0f};
 	CUIRect Link;
-	static CButtonContainer s_Tutorial, s_News, s_Console, s_Source;
+	static DespiteTheme::CButton s_Tutorial, s_News, s_Console, s_Source;
 	Footer.VSplitLeft(80.0f, &Link, &Footer);
 	if(DespiteTheme::Link(Ui(), TextRender(), &s_Tutorial, Link, Localize("Tutorial")))
 		GameClient()->m_Menus.JoinTutorial();

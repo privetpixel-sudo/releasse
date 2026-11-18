@@ -20,6 +20,8 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	Params.m_SliderColor = DespiteTheme::Muted();
 	s_Scroll.Begin(&MainView, &Params);
 	CUIRect Content = MainView;
+	Content.VMargin(4.0f, &Content);
+	Content.y += 4.0f; // Leave room for scaled/lifted button faces inside the clip.
 	Content.h = s_Details ? 380.0f : 300.0f;
 	s_Scroll.AddRect(Content);
 	const float Width = std::min(540.0f, Content.w);
@@ -31,7 +33,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	TextRender()->TextColor(DespiteTheme::Text());
 	Ui()->DoLabel(&Title, "Ðespiтe", 24.0f, TEXTALIGN_ML);
 	const bool Enabled = DespiteAntipingEnabled(g_Config);
-	static CButtonContainer s_Enable;
+	static DespiteTheme::CButton s_Enable;
 	if(DespiteTheme::Button(Ui(), TextRender(), &s_Enable, Toggle, Enabled ? TCLocalize("Turn off") : TCLocalize("Enable antiping"), !Enabled))
 	{
 		if(Enabled)
@@ -50,17 +52,13 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	DespiteTheme::Surface(Profiles, 12.0f);
 	Profiles.Margin(3.0f, &Profiles);
 	const char *apNames[] = {TCLocalize("Responsive"), TCLocalize("Balanced"), TCLocalize("Smooth")};
-	static CButtonContainer s_aProfiles[3];
+	static DespiteTheme::CButton s_aProfiles[3];
 	const float ProfileWidth = Profiles.w / 3.0f;
 	for(int Profile = 0; Profile < 3; ++Profile)
 	{
 		Profiles.VSplitLeft(ProfileWidth, &Button, &Profiles);
 		Button.VMargin(2.0f, &Button);
-		if(Profile == g_Config.m_TcDespiteProfile || Ui()->MouseHovered(&Button))
-			DespiteTheme::Surface(Button, 9.0f, true);
-		TextRender()->TextColor(Profile == g_Config.m_TcDespiteProfile ? DespiteTheme::Text() : DespiteTheme::Muted());
-		Ui()->DoLabel(&Button, apNames[Profile], 13.0f, TEXTALIGN_MC);
-		if(Ui()->DoButtonLogic(&s_aProfiles[Profile], 0, &Button, BUTTONFLAG_LEFT))
+		if(DespiteTheme::Choice(Ui(), TextRender(), &s_aProfiles[Profile], Button, apNames[Profile], Profile == g_Config.m_TcDespiteProfile))
 		{
 			if(Enabled)
 				ApplyDespiteAntipingPreset(g_Config, Profile);
@@ -97,7 +95,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 		str_copy(aStatus, TCLocalize("Connect to see live values"));
 	TextRender()->TextColor(DespiteTheme::Muted());
 	Ui()->DoLabel(&Row, aStatus, 12.0f, TEXTALIGN_ML);
-	static CButtonContainer s_DetailsButton;
+	static DespiteTheme::CButton s_DetailsButton;
 	if(DespiteTheme::Link(Ui(), TextRender(), &s_DetailsButton, Details, s_Details ? TCLocalize("Less") : TCLocalize("Details")))
 		s_Details = !s_Details;
 	if(s_Details)
