@@ -1,144 +1,120 @@
 #include "despite_antiping.h"
+#include "despite_theme.h"
 
-#include <engine/graphics.h>
-#include <engine/textrender.h>
+#include <engine/shared/config.h>
 
 #include <game/client/components/menus.h>
 #include <game/client/gameclient.h>
-#include <game/client/ui.h>
 #include <game/client/ui_scrollregion.h>
 #include <game/localization.h>
 
 void CMenus::RenderSettingsDespite(CUIRect MainView)
 {
-	const ColorRGBA Background(0.055f, 0.10f, 0.18f, 0.97f);
-	const ColorRGBA Panel(0.10f, 0.18f, 0.28f, 1.0f);
-	const ColorRGBA Accent(0.32f, 0.86f, 0.82f, 1.0f);
-	const ColorRGBA Muted(0.73f, 0.82f, 0.90f, 1.0f);
-	MainView.Draw(Background, IGraphics::CORNER_ALL, 12.0f);
-	MainView.Margin(14.0f, &MainView);
-
+	MainView.Draw(ColorRGBA(0.075f, 0.075f, 0.075f, 0.96f), IGraphics::CORNER_ALL, 14.0f);
+	MainView.Margin(18.0f, &MainView);
 	static CScrollRegion s_Scroll;
+	static bool s_Details = false;
 	CScrollRegionParams Params;
 	Params.m_ScrollUnit = 40.0f;
 	Params.m_ScrollbarThickness = 10.0f;
-	Params.m_SliderColor = Accent;
+	Params.m_SliderColor = DespiteTheme::Muted();
 	s_Scroll.Begin(&MainView, &Params);
 	CUIRect Content = MainView;
-	Content.h = 405.0f;
+	Content.h = s_Details ? 380.0f : 300.0f;
 	s_Scroll.AddRect(Content);
-
-	CUIRect Header, Title, Subtitle, Tee;
-	Content.HSplitTop(82.0f, &Header, &Content);
-	Header.VSplitRight(88.0f, &Header, &Tee);
-	Header.HSplitTop(38.0f, &Title, &Header);
-	TextRender()->TextColor(Accent);
-	Ui()->DoLabel(&Title, "Ðespiтe Tater", 28.0f, TEXTALIGN_ML);
-	TextRender()->TextColor(Muted);
-	Header.HSplitTop(23.0f, &Subtitle, &Header);
-	Ui()->DoLabel(&Subtitle, TCLocalize("Keep your flow."), 16.0f, TEXTALIGN_ML);
-	TextRender()->TextColor(TextRender()->DefaultTextColor());
-	RenderDevSkin(Tee.Center(), 62.0f, "default", "default", true, 0, 0, 0, false, false,
-		ColorRGBA(0.24f, 0.48f, 0.67f, 1.0f), Accent);
-
-	CUIRect Left, Right, Row, Button;
-	Content.HSplitTop(252.0f, &Content, nullptr);
-	Content.VSplitLeft(Content.w * 0.57f, &Left, &Right);
-	Left.VSplitRight(12.0f, &Left, nullptr);
-	Right.Draw(Panel, IGraphics::CORNER_ALL, 9.0f);
-	Right.Margin(12.0f, &Right);
-
-	Left.HSplitTop(28.0f, &Row, &Left);
-	Ui()->DoLabel(&Row, TCLocalize("Adaptive antiping"), 19.0f, TEXTALIGN_ML);
-	Left.HSplitTop(8.0f, nullptr, &Left);
-	Left.HSplitTop(28.0f, &Row, &Left);
+	const float Width = std::min(540.0f, Content.w);
+	Content.x += (Content.w - Width) / 2.0f;
+	Content.w = Width;
+	CUIRect Row, Title, Toggle;
+	Content.HSplitTop(32.0f, &Row, &Content);
+	Row.VSplitRight(122.0f, &Title, &Toggle);
+	TextRender()->TextColor(DespiteTheme::Text());
+	Ui()->DoLabel(&Title, "Ðespiтe", 24.0f, TEXTALIGN_ML);
 	const bool Enabled = DespiteAntipingEnabled(g_Config);
 	static CButtonContainer s_Enable;
-	if(DoButton_Menu(&s_Enable, Enabled ? TCLocalize("Disable adaptive recovery") : TCLocalize("Enable recommended setup"), 0, &Row,
-		   BUTTONFLAG_LEFT, nullptr, IGraphics::CORNER_ALL, 6.0f, 0.0f, ColorRGBA(0.17f, 0.48f, 0.51f, 1.0f)))
+	if(DespiteTheme::Button(Ui(), TextRender(), &s_Enable, Toggle, Enabled ? TCLocalize("Turn off") : TCLocalize("Enable antiping"), !Enabled))
 	{
 		if(Enabled)
 			g_Config.m_TcDespiteAntiping = 0;
 		else
 			ApplyDespiteAntipingPreset(g_Config, g_Config.m_TcDespiteProfile);
 	}
+	Content.HSplitTop(6.0f, nullptr, &Content);
+	Content.HSplitTop(22.0f, &Row, &Content);
+	TextRender()->TextColor(DespiteTheme::Muted());
+	Ui()->DoLabel(&Row, TCLocalize("Adaptive antiping"), 13.0f, TEXTALIGN_ML);
+	Content.HSplitTop(20.0f, nullptr, &Content);
 
-	Left.HSplitTop(12.0f, nullptr, &Left);
-	Left.HSplitTop(20.0f, &Row, &Left);
-	Ui()->DoLabel(&Row, TCLocalize("Choose your feel"), 14.0f, TEXTALIGN_ML);
-	Left.HSplitTop(26.0f, &Row, &Left);
+	CUIRect Profiles, Button;
+	Content.HSplitTop(37.0f, &Profiles, &Content);
+	DespiteTheme::Surface(Profiles, 12.0f);
+	Profiles.Margin(3.0f, &Profiles);
 	const char *apNames[] = {TCLocalize("Responsive"), TCLocalize("Balanced"), TCLocalize("Smooth")};
 	static CButtonContainer s_aProfiles[3];
-	const float Width = Row.w / 3.0f;
+	const float ProfileWidth = Profiles.w / 3.0f;
 	for(int Profile = 0; Profile < 3; ++Profile)
 	{
-		Row.VSplitLeft(Width, &Button, &Row);
+		Profiles.VSplitLeft(ProfileWidth, &Button, &Profiles);
 		Button.VMargin(2.0f, &Button);
-		if(DoButton_MenuTab(&s_aProfiles[Profile], apNames[Profile], g_Config.m_TcDespiteProfile == Profile, &Button,
-			   IGraphics::CORNER_ALL, nullptr, nullptr, nullptr, nullptr, 5.0f))
+		if(Profile == g_Config.m_TcDespiteProfile || Ui()->MouseHovered(&Button))
+			DespiteTheme::Surface(Button, 9.0f, true);
+		TextRender()->TextColor(Profile == g_Config.m_TcDespiteProfile ? DespiteTheme::Text() : DespiteTheme::Muted());
+		Ui()->DoLabel(&Button, apNames[Profile], 13.0f, TEXTALIGN_MC);
+		if(Ui()->DoButtonLogic(&s_aProfiles[Profile], 0, &Button, BUTTONFLAG_LEFT))
 		{
-			// Selecting a profile preserves the disabled state.
 			if(Enabled)
 				ApplyDespiteAntipingPreset(g_Config, Profile);
 			else
 				g_Config.m_TcDespiteProfile = Profile;
 		}
 	}
-	Left.HSplitTop(7.0f, nullptr, &Left);
-	Left.HSplitTop(42.0f, &Row, &Left);
-	const char *apDescriptions[] = {
-		TCLocalize("Faster recovery. Best for stable connections."),
-		TCLocalize("A balance of quick response and smooth corrections."),
-		TCLocalize("Gentler recovery when your connection fluctuates.")};
-	TextRender()->TextColor(Muted);
-	SLabelProperties Props;
-	Props.m_MaxWidth = Row.w;
-	Ui()->DoLabel(&Row, apDescriptions[std::clamp(g_Config.m_TcDespiteProfile, 0, 2)], 12.0f, TEXTALIGN_ML, Props);
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
-	DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_TcDespiteHud, TCLocalize("Show antiping status in game"), &g_Config.m_TcDespiteHud, &Left, 22.0f);
+	Content.HSplitTop(15.0f, nullptr, &Content);
+	Content.HSplitTop(24.0f, &Row, &Content);
+	Ui()->DoScrollbarOption(&g_Config.m_TcDespiteSmoothness, &g_Config.m_TcDespiteSmoothness, &Row, TCLocalize("Smoothness"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
+	Content.HSplitTop(9.0f, nullptr, &Content);
+	Content.HSplitTop(22.0f, &Row, &Content);
+	SLabelProperties Wrap;
+	Wrap.m_MaxWidth = Row.w;
+	TextRender()->TextColor(DespiteTheme::Muted());
+	Ui()->DoLabel(&Row, TCLocalize("Softer player corrections. Your own input stays immediate."), 11.0f, TEXTALIGN_ML, Wrap);
+	TextRender()->TextColor(TextRender()->DefaultTextColor());
+	Content.HSplitTop(10.0f, nullptr, &Content);
+	DoButton_CheckBoxAutoVMarginAndSet(&g_Config.m_TcDespiteHud, TCLocalize("Show antiping status in game"), &g_Config.m_TcDespiteHud, &Content, 22.0f);
 
-	Right.HSplitTop(24.0f, &Row, &Right);
-	Ui()->DoLabel(&Row, TCLocalize("Connection"), 17.0f, TEXTALIGN_ML);
-	Right.HSplitTop(26.0f, &Row, &Right);
 	const bool Online = Client()->State() == IClient::STATE_ONLINE;
 	const bool Active = Online && Enabled && GameClient()->Predict() && GameClient()->AntiPingPlayers();
-	TextRender()->TextColor(Active ? Accent : Muted);
-	Ui()->DoLabel(&Row, !Online ? TCLocalize("Connect to see live values") : Active ? TCLocalize("Adaptive recovery active") :
-											  TCLocalize("Adaptive recovery inactive"),
-		12.0f, TEXTALIGN_ML);
-	TextRender()->TextColor(TextRender()->DefaultTextColor());
-
-	const auto &Filter = GameClient()->m_aDespiteAntiping[g_Config.m_ClDummy];
 	const int LocalId = GameClient()->m_Snap.m_LocalClientId;
-	const CNetObj_PlayerInfo *pInfo = Online && LocalId >= 0 ? GameClient()->m_Snap.m_apPlayerInfos[LocalId] : nullptr;
-	const char *apLabels[] = {TCLocalize("Server-reported ping"), TCLocalize("Prediction variation"), TCLocalize("Recovery scale")};
-	for(int Metric = 0; Metric < 3; ++Metric)
+	const auto *pInfo = Online && in_range(LocalId, 0, MAX_CLIENTS - 1) ? GameClient()->m_Snap.m_apPlayerInfos[LocalId] : nullptr;
+	Content.HSplitTop(17.0f, nullptr, &Content);
+	Content.HSplitTop(26.0f, &Row, &Content);
+	CUIRect Details;
+	Row.VSplitRight(100.0f, &Row, &Details);
+	char aStatus[192];
+	if(pInfo)
+		str_format(aStatus, sizeof(aStatus), "%s / %d ms", Active ? TCLocalize("Active") : TCLocalize("Inactive"), pInfo->m_Latency);
+	else
+		str_copy(aStatus, TCLocalize("Connect to see live values"));
+	TextRender()->TextColor(DespiteTheme::Muted());
+	Ui()->DoLabel(&Row, aStatus, 12.0f, TEXTALIGN_ML);
+	static CButtonContainer s_DetailsButton;
+	if(DespiteTheme::Link(Ui(), TextRender(), &s_DetailsButton, Details, s_Details ? TCLocalize("Less") : TCLocalize("Details")))
+		s_Details = !s_Details;
+	if(s_Details)
 	{
-		Right.HSplitTop(43.0f, &Row, &Right);
-		CUIRect Label, Value;
-		Row.HSplitTop(17.0f, &Label, &Value);
-		TextRender()->TextColor(Muted);
-		Ui()->DoLabel(&Label, apLabels[Metric], 11.0f, TEXTALIGN_ML);
-		TextRender()->TextColor(TextRender()->DefaultTextColor());
-		char aValue[64];
-		str_copy(aValue, "--");
-		if(Metric == 0 && pInfo)
-			str_format(aValue, sizeof(aValue), "%d ms", pInfo->m_Latency);
-		else if(Metric == 1 && Active)
-			str_format(aValue, sizeof(aValue), "%.1f ms", Filter.JitterMs());
-		else if(Metric == 2 && Active)
-			str_format(aValue, sizeof(aValue), "%.2fx", Filter.RecoveryScale(g_Config.m_TcDespiteProfile));
-		Ui()->DoLabel(&Value, aValue, 18.0f, TEXTALIGN_ML);
+		Content.HSplitTop(12.0f, nullptr, &Content);
+		Content.HSplitTop(23.0f, &Row, &Content);
+		const auto &Filter = GameClient()->m_aDespiteAntiping[g_Config.m_ClDummy];
+		if(Active)
+			str_format(aStatus, sizeof(aStatus), "%s: %.1f ms / %s: %.2fx", TCLocalize("Prediction variation"), Filter.JitterMs(), TCLocalize("Recovery scale"), Filter.RecoveryScale(g_Config.m_TcDespiteProfile));
+		else
+			str_copy(aStatus, TCLocalize("Adaptive recovery inactive"));
+		Ui()->DoLabel(&Row, aStatus, 11.0f, TEXTALIGN_ML);
+		Content.HSplitTop(8.0f, nullptr, &Content);
+		Content.HSplitTop(40.0f, &Row, &Content);
+		Wrap.m_MaxWidth = Row.w;
+		Ui()->DoLabel(&Row, TCLocalize("Prediction can make movement feel more immediate. Your real ping stays the same; packet loss and server corrections still matter."), 11.0f, TEXTALIGN_ML, Wrap);
 	}
-
-	CUIRect Footer = MainView;
-	Footer.y += 349.0f;
-	Footer.h = 50.0f;
-	Footer.Draw(Panel, IGraphics::CORNER_ALL, 6.0f);
-	Footer.Margin(9.0f, &Footer);
-	TextRender()->TextColor(Muted);
-	Props.m_MaxWidth = Footer.w;
-	Ui()->DoLabel(&Footer, TCLocalize("Prediction can make movement feel more immediate. Your real ping stays the same; packet loss and server corrections still matter."), 12.0f, TEXTALIGN_ML, Props);
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 	s_Scroll.End();
 }

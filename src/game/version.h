@@ -27,6 +27,6 @@ extern const char *GIT_SHORTREV_HASH;
 
 // custom
 #define CLIENT_NAME "Ðespiтe Tater"
-#define CLIENT_RELEASE_VERSION "0.1.0"
+#define CLIENT_RELEASE_VERSION "0.2.0"
 
 #endif

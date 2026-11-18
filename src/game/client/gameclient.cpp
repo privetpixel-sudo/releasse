@@ -648,6 +648,7 @@ void CGameClient::OnReset()
 	InvalidateSnapshot();
 	for(auto &Antiping : m_aDespiteAntiping)
 		Antiping.Reset();
+	m_aDespiteBlendTick.fill(-1);
 
 	m_EditorMovementDelay = 5;
 
@@ -3065,6 +3066,10 @@ void CGameClient::OnPredict()
 		int PredTime = std::clamp(Client()->GetPredictionTime(), 0, 8000); // Milliseconds for some reason?? TODO: Use more precision
 		const int PredEndTick = FinalTickRegular;
 		const int SmoothTick = PredEndTick;
+		const int PreviousBlendTick = m_aDespiteBlendTick[g_Config.m_ClDummy];
+		const bool ResetBlend = PreviousBlendTick < 0 || PredEndTick < PreviousBlendTick;
+		const float BlendSeconds = ResetBlend ? 0.0f : static_cast<float>(PredEndTick - PreviousBlendTick) / Client()->GameTickSpeed();
+		m_aDespiteBlendTick[g_Config.m_ClDummy] = PredEndTick;
 
 		// Nightmare: in order to get 100% accurate comparison to detect mispredictions we must
 		// tick the PREVIOUS predicted world with our CURRENT predicted inputs
@@ -3104,11 +3109,13 @@ void CGameClient::OnPredict()
 			if(!m_Snap.m_aCharacters[i].m_Active || !m_aLastActive[i])
 			{
 				m_aClients[i].m_ValidAntipingSmooth = false;
+				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
 				continue;
 			}
 
 			if(i == m_aLocalIds[!g_Config.m_ClDummy] || i == m_Snap.m_LocalClientId)
 			{
+				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
 				m_aClients[i].m_PrevImprovedPredPos = m_aClients[i].m_PrevPredicted.m_Pos;
 				m_aClients[i].m_ImprovedPredPos = m_aClients[i].m_Predicted.m_Pos;
 				continue;
@@ -3179,6 +3186,7 @@ void CGameClient::OnPredict()
 			// Not enough history data
 			if(!ValidRecentPositions || !FoundBoundingBox || HistoryCount == 0 || /*HistoryDistance <= 0.0f ||*/ GameTick <= 0)
 			{
+				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
 				m_aClients[i].m_PrevImprovedPredPos = PrevPredPos;
 				m_aClients[i].m_ImprovedPredPos = PredPos;
 				continue;
@@ -3247,7 +3255,15 @@ void CGameClient::OnPredict()
 			if(!g_Config.m_TcAntiPingStableDirection)
 				TrustFactor = 0.0f;
 
-			vec2 ConfidenceVector = ConfidenceParallel * std::max(TrustFactor, NewConfidence) + ConfidencePerp * NewConfidence;
+			vec2 Weights(std::max(TrustFactor, NewConfidence), NewConfidence);
+			auto &Blend = m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy];
+			if(ResetBlend || distance(ServerPos, PrevServerPos) > 600.0f || distance(PredPos, PrevPredPos) > 600.0f)
+				Blend.Reset();
+			if(UseDespiteAntiping)
+				Weights = Blend.Update(Weights, BlendSeconds, g_Config.m_TcDespiteProfile, DespiteAntiping.JitterMs(), g_Config.m_TcDespiteSmoothness);
+			else
+				Blend.Reset();
+			vec2 ConfidenceVector = ConfidenceParallel * Weights.x + ConfidencePerp * Weights.y;
 
 			// Minor safe guard against insane predictions
 			if(length(ConfidenceVector) > HistoryDistance)
@@ -3450,6 +3466,8 @@ void CGameClient::CClientData::UpdateRenderInfo()
 
 void CGameClient::CClientData::Reset()
 {
+	for(auto &Blend : m_aDespiteBlend)
+		Blend.Reset();
 	m_UseCustomColor = 0;
 	m_ColorBody = 0;
 	m_ColorFeet = 0;
@@ -4230,7 +4248,10 @@ void CGameClient::UpdateRenderedCharacters()
 	for(int i = 0; i < MAX_CLIENTS; i++)
 	{
 		if(!m_Snap.m_aCharacters[i].m_Active)
+		{
+			m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
 			continue;
+		}
 		m_aClients[i].m_RenderCur = m_Snap.m_aCharacters[i].m_Cur;
 		m_aClients[i].m_RenderPrev = m_Snap.m_aCharacters[i].m_Prev;
 		m_aClients[i].m_IsPredicted = false;

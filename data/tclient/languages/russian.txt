@@ -945,3 +945,39 @@ Prediction can make movement feel more immediate. Your real ping stays the same;
 
 Inactive
 == Неактивно
+
+Make it yours
+== Настрой под себя
+
+Your saved runs
+== Сохранённые забеги
+
+Create a map
+== Создай свою карту
+
+Local practice
+== Локальная тренировка
+
+Console
+== Консоль
+
+Turn off
+== Выключить
+
+Enable antiping
+== Включить антипинг
+
+Smoothness
+== Плавность
+
+Softer player corrections. Your own input stays immediate.
+== Мягче коррекции других игроков. Твоё управление остаётся быстрым.
+
+Active
+== Активно
+
+Less
+== Свернуть
+
+Details
+== Подробнее

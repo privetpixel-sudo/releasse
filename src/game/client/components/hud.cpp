@@ -1998,8 +1998,8 @@ void CHud::RenderDespiteAntiping()
 	const float Width = TextRender()->TextWidth(5.0f, aText) + 12.0f;
 	const float Bottom = m_Height - (g_Config.m_TcStatusBar ? g_Config.m_TcStatusBarHeight : 0.0f);
 	CUIRect Rect = {m_Width / 2.0f - Width / 2.0f, Bottom - 16.0f, Width, 11.0f};
-	Rect.Draw(ColorRGBA(0.055f, 0.10f, 0.18f, 0.85f), IGraphics::CORNER_ALL, 3.0f);
-	TextRender()->TextColor(Active ? ColorRGBA(0.32f, 0.86f, 0.82f, 1.0f) : ColorRGBA(0.73f, 0.82f, 0.90f, 1.0f));
+	Rect.Draw(ColorRGBA(0.08f, 0.08f, 0.08f, 0.80f), IGraphics::CORNER_ALL, 3.0f);
+	TextRender()->TextColor(Active ? ColorRGBA(0.90f, 0.90f, 0.92f, 1.0f) : ColorRGBA(0.60f, 0.60f, 0.62f, 1.0f));
 	TextRender()->Text(Rect.x + 6.0f, Rect.y + 3.0f, 5.0f, aText);
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 }

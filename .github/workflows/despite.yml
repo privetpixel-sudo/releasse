@@ -2,6 +2,7 @@ name: Despite build and tests
 
 on:
   push:
+    branches: [master]
   pull_request:
   workflow_dispatch:
 
@@ -23,7 +24,7 @@ jobs:
       - name: Configure
         run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DDOWNLOAD_GTEST=ON -DAUTOUPDATE=OFF -DVULKAN=OFF -DVIDEORECORDER=OFF '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=.
       - name: Build client
-        run: cmake --build build --config Release --target game-client --parallel 4
+        run: cmake --build build --config Release --target game-client game-server --parallel 4
       - name: Run all tests
         run: cmake --build build --config Release --target run_tests --parallel 4
       - name: Upload testable client
@@ -32,6 +33,7 @@ jobs:
           name: despite-tater-windows
           path: |
             build/DDNet.exe
+            build/DDNet-Server.exe
             build/*.dll
             build/data
             license.txt

@@ -34,6 +34,7 @@
 #include <game/client/components/key_binder.h>
 #include <game/client/components/menu_background.h>
 #include <game/client/components/sounds.h>
+#include <game/client/components/tclient/despite_theme.h>
 #include <game/client/gameclient.h>
 #include <game/client/ui_listbox.h>
 #include <game/localization.h>
@@ -1023,14 +1024,14 @@ void CMenus::Render()
 	}
 	else
 	{
-		if(!GameClient()->m_MenuBackground.Render())
-		{
-			RenderBackground();
-		}
+		DespiteTheme::Background(*Ui()->Screen());
 		ms_ColorTabbarInactive = ms_ColorTabbarInactiveOutgame;
 		ms_ColorTabbarActive = ms_ColorTabbarActiveOutgame;
 		ms_ColorTabbarHover = ms_ColorTabbarHoverOutgame;
 	}
+	ms_ColorTabbarInactive = ColorRGBA(0.10f, 0.10f, 0.10f, 0.85f);
+	ms_ColorTabbarActive = ColorRGBA(0.25f, 0.25f, 0.25f, 0.95f);
+	ms_ColorTabbarHover = ColorRGBA(0.34f, 0.34f, 0.34f, 0.95f);
 
 	CUIRect Screen = *Ui()->Screen();
 	if(Client()->State() != IClient::STATE_DEMOPLAYBACK || m_Popup != POPUP_NONE)

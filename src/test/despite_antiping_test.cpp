@@ -125,3 +125,77 @@ TEST(DespiteAntiping, MissingDependenciesAndConflictingSmoothingReportInactive)
 	Config.m_ClAntiPingSmooth = 1;
 	EXPECT_FALSE(DespiteAntipingEnabled(Config));
 }
+
+// Catch instantaneous confidence jumps, FPS-dependent easing, axis overshoot,
+// stale state after teleports, and adding delay when smoothing is disabled.
+TEST(DespiteBlend, CorrectionIsSoftButConverges)
+{
+	CDespitePredictionBlend Blend;
+	Blend.Update(vec2(1, 1), 0.02f, 1, 0, 65);
+	const vec2 First = Blend.Update(vec2(0, 0), 0.02f, 1, 0, 65);
+	EXPECT_GT(First.x, 0.0f);
+	EXPECT_LT(First.x, 1.0f);
+	vec2 Result;
+	for(int Tick = 0; Tick < 30; ++Tick)
+		Result = Blend.Update(vec2(0, 0), 0.02f, 1, 0, 65);
+	EXPECT_LT(Result.x, 0.001f);
+}
+
+TEST(DespiteBlend, EqualElapsedTimeHasEqualResultAtDifferentFrameRates)
+{
+	CDespitePredictionBlend Slow, Fast;
+	Slow.Update(vec2(1, 0), 0.0f, 1, 8, 65);
+	Fast.Update(vec2(1, 0), 0.0f, 1, 8, 65);
+	vec2 A, B;
+	for(int Frame = 0; Frame < 6; ++Frame)
+		A = Slow.Update(vec2(0, 1), 1.0f / 60.0f, 1, 8, 65);
+	for(int Frame = 0; Frame < 24; ++Frame)
+		B = Fast.Update(vec2(0, 1), 1.0f / 240.0f, 1, 8, 65);
+	EXPECT_NEAR(A.x, B.x, 0.00001f);
+	EXPECT_NEAR(A.y, B.y, 0.00001f);
+	EXPECT_GT(A.x, 0.0f);
+}
+
+TEST(DespiteBlend, MoreSmoothnessAndJitterSoftenTheSameCorrection)
+{
+	CDespitePredictionBlend Light, Smooth, Unstable;
+	Light.Update(vec2(1, 1), 0.0f, 1, 0, 20);
+	Smooth.Update(vec2(1, 1), 0.0f, 1, 0, 90);
+	Unstable.Update(vec2(1, 1), 0.0f, 1, 30, 90);
+	const float A = Light.Update(vec2(0, 0), 0.02f, 1, 0, 20).x;
+	const float B = Smooth.Update(vec2(0, 0), 0.02f, 1, 0, 90).x;
+	const float C = Unstable.Update(vec2(0, 0), 0.02f, 1, 30, 90).x;
+	EXPECT_GT(B, A);
+	EXPECT_GT(C, B);
+}
+
+TEST(DespiteBlend, ResetImmediatelyUsesNewTargetAfterTeleport)
+{
+	CDespitePredictionBlend Blend;
+	Blend.Update(vec2(1, 1), 0.02f, 2, 20, 100);
+	EXPECT_GT(Blend.Update(vec2(0, 0), 0.02f, 2, 20, 100).x, 0.0f);
+	Blend.Reset();
+	EXPECT_EQ(Blend.Update(vec2(0, 1), 0.02f, 2, 20, 100), vec2(0, 1));
+}
+
+TEST(DespiteBlend, DisabledSmoothingImmediatelyUsesTarget)
+{
+	CDespitePredictionBlend Blend;
+	Blend.Update(vec2(1, 1), 0.02f, 1, 0, 65);
+	EXPECT_EQ(Blend.Update(vec2(0, 1), 0.02f, 1, 0, 0), vec2(0, 1));
+}
+
+TEST(DespiteBlend, ZeroElapsedTimeHoldsBlendAndAxesNeverOvershoot)
+{
+	CDespitePredictionBlend Blend;
+	Blend.Update(vec2(1, 0), 0.02f, 1, 0, 65);
+	EXPECT_EQ(Blend.Update(vec2(0, 1), 0.0f, 1, 0, 65), vec2(1, 0));
+	for(int Tick = 0; Tick < 200; ++Tick)
+	{
+		const vec2 Result = Blend.Update(Tick % 2 ? vec2(0, 1) : vec2(1, 0), 0.02f, 1, 20, 65);
+		EXPECT_GE(Result.x, 0.0f);
+		EXPECT_LE(Result.x, 1.0f);
+		EXPECT_GE(Result.y, 0.0f);
+		EXPECT_LE(Result.y, 1.0f);
+	}
+}

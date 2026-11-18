@@ -1,6 +1,8 @@
 #ifndef GAME_CLIENT_COMPONENTS_TCLIENT_DESPITE_ANTIPING_H
 #define GAME_CLIENT_COMPONENTS_TCLIENT_DESPITE_ANTIPING_H
 
+#include <base/vmath.h>
+
 #include <engine/shared/config.h>
 
 #include <algorithm>
@@ -48,6 +50,35 @@ public:
 		constexpr std::array<float, 3> aBaseScale = {0.85f, 1.25f, 1.8f};
 		const float JitterPenalty = std::clamp(2.0f * m_JitterMs / std::max(m_PredictionMs, 20.0f), 0.0f, 2.0f);
 		return aBaseScale[std::clamp(Profile, 0, 2)] + JitterPenalty;
+	}
+};
+
+class CDespitePredictionBlend
+{
+	vec2 m_Weights = vec2(1, 1);
+	bool m_Initialized = false;
+
+public:
+	void Reset() { *this = CDespitePredictionBlend(); }
+
+	// Smooth confidence changes, not player motion. Normal prediction remains
+	// immediate, and the caller still clamps positions to the predicted path.
+	vec2 Update(vec2 Target, float DeltaSeconds, int Profile, float JitterMs, int Smoothness)
+	{
+		Target.x = std::clamp(Target.x, 0.0f, 1.0f);
+		Target.y = std::clamp(Target.y, 0.0f, 1.0f);
+		if(!m_Initialized || Smoothness <= 0 || DeltaSeconds > 0.25f)
+		{
+			m_Initialized = true;
+			m_Weights = Target;
+			return m_Weights;
+		}
+		constexpr std::array<float, 3> aBaseMs = {12.0f, 22.0f, 35.0f};
+		const float DurationMs = aBaseMs[std::clamp(Profile, 0, 2)] +
+					 0.25f * std::clamp(Smoothness, 0, 100) + 0.5f * std::clamp(JitterMs, 0.0f, 40.0f);
+		const float Alpha = 1.0f - std::exp(-std::max(DeltaSeconds, 0.0f) * 1000.0f / DurationMs);
+		m_Weights = mix(m_Weights, Target, Alpha);
+		return m_Weights;
 	}
 };
 

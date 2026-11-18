@@ -552,6 +552,7 @@ public:
 		//vec2 m_DebugVector2 = vec2(0, 0);
 		//vec2 m_DebugVector3 = vec2(0, 0);
 		float m_Uncertainty = 0.0f;
+		std::array<CDespitePredictionBlend, NUM_DUMMIES> m_aDespiteBlend;
 		float m_VolleyBallAngle = 0.0f;
 		bool m_IsVolleyBall = false;
 
@@ -789,6 +790,7 @@ public:
 	CGameWorld m_ExtraPredictedWorld;
 	CGameWorld m_PredSmoothingWorld;
 	std::array<CDespiteAntiping, NUM_DUMMIES> m_aDespiteAntiping;
+	std::array<int, NUM_DUMMIES> m_aDespiteBlendTick;
 
 	std::vector<SSwitchers> &Switchers() { return m_GameWorld.m_Core.m_vSwitchers; }
 	std::vector<SSwitchers> &PredSwitchers() { return m_PredictedWorld.m_Core.m_vSwitchers; }
