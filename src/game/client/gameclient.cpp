@@ -3516,6 +3516,8 @@ void CGameClient::CClientData::Reset()
 		Blend.Reset();
 	for(auto &Correction : m_aDespiteCorrection)
 		Correction.Reset();
+	for(auto &Hammer : m_aDespiteHammer)
+		Hammer.Reset();
 	m_UseCustomColor = 0;
 	m_ColorBody = 0;
 	m_ColorFeet = 0;
@@ -4299,6 +4301,7 @@ void CGameClient::UpdateRenderedCharacters()
 		{
 			m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
 			m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy].Reset();
+			m_aClients[i].m_aDespiteHammer[g_Config.m_ClDummy].Reset();
 			continue;
 		}
 		m_aClients[i].m_RenderCur = m_Snap.m_aCharacters[i].m_Cur;

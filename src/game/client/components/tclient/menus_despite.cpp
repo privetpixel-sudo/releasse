@@ -22,7 +22,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	CUIRect Content = MainView;
 	Content.VMargin(4.0f, &Content);
 	Content.y += 4.0f; // Leave room for scaled/lifted button faces inside the clip.
-	Content.h = s_Details ? 380.0f : 300.0f;
+	Content.h = s_Details ? 470.0f : 390.0f;
 	s_Scroll.AddRect(Content);
 	const float Width = std::min(540.0f, Content.w);
 	Content.x += (Content.w - Width) / 2.0f;
@@ -39,18 +39,37 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 		if(Enabled)
 			g_Config.m_TcDespiteAntiping = 0;
 		else
-			ApplyDespiteAntipingPreset(g_Config, g_Config.m_TcDespiteProfile);
+		{
+			if(g_Config.m_TcDespitePingPreset > 0)
+				ApplyDespitePingPreset(g_Config, g_Config.m_TcDespitePingPreset);
+			else
+				ApplyDespiteAntipingPreset(g_Config, g_Config.m_TcDespiteProfile);
+		}
 	}
 	Content.HSplitTop(6.0f, nullptr, &Content);
 	Content.HSplitTop(22.0f, &Row, &Content);
-	CUIRect HighPing;
-	Row.VSplitRight(140.0f, &Row, &HighPing);
 	TextRender()->TextColor(DespiteTheme::Muted());
 	Ui()->DoLabel(&Row, TCLocalize("Adaptive antiping"), 13.0f, TEXTALIGN_ML);
-	static DespiteTheme::CButton s_HighPing;
-	if(DespiteTheme::Link(Ui(), TextRender(), &s_HighPing, HighPing, TCLocalize("100 ms setup")))
-		ApplyDespiteHighPingPreset(g_Config);
-	Content.HSplitTop(20.0f, nullptr, &Content);
+	Content.HSplitTop(14.0f, nullptr, &Content);
+	Content.HSplitTop(20.0f, &Row, &Content);
+	Ui()->DoLabel(&Row, TCLocalize("Ping preset (ms)"), 12.0f, TEXTALIGN_ML);
+	static DespiteTheme::CButton s_aPingPresets[9];
+	const char *apPings[] = {"30", "40", "50", "60", "70", "80", "90", "100", "100+"};
+	const int Columns = Content.w >= 440.0f ? 9 : 5;
+	for(int First = 0; First < 9; First += Columns)
+	{
+		Content.HSplitTop(34.0f, &Row, &Content);
+		const float CellWidth = Row.w / Columns;
+		for(int Preset = First; Preset < std::min(First + Columns, 9); ++Preset)
+		{
+			CUIRect Cell;
+			Row.VSplitLeft(CellWidth, &Cell, &Row);
+			Cell.Margin(3.0f, &Cell);
+			if(DespiteTheme::Choice(Ui(), TextRender(), &s_aPingPresets[Preset], Cell, apPings[Preset], g_Config.m_TcDespitePingPreset == Preset + 1))
+				ApplyDespitePingPreset(g_Config, Preset + 1);
+		}
+	}
+	Content.HSplitTop(12.0f, nullptr, &Content);
 
 	CUIRect Profiles, Button;
 	Content.HSplitTop(37.0f, &Profiles, &Content);
@@ -65,6 +84,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 		Button.VMargin(2.0f, &Button);
 		if(DespiteTheme::Choice(Ui(), TextRender(), &s_aProfiles[Profile], Button, apNames[Profile], Profile == g_Config.m_TcDespiteProfile))
 		{
+			g_Config.m_TcDespitePingPreset = 0;
 			if(Enabled)
 				ApplyDespiteAntipingPreset(g_Config, Profile);
 			else
@@ -74,7 +94,10 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 	Content.HSplitTop(15.0f, nullptr, &Content);
 	Content.HSplitTop(24.0f, &Row, &Content);
+	const int PreviousSmoothness = g_Config.m_TcDespiteSmoothness;
 	Ui()->DoScrollbarOption(&g_Config.m_TcDespiteSmoothness, &g_Config.m_TcDespiteSmoothness, &Row, TCLocalize("Smoothness"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
+	if(PreviousSmoothness != g_Config.m_TcDespiteSmoothness)
+		g_Config.m_TcDespitePingPreset = 0;
 	Content.HSplitTop(9.0f, nullptr, &Content);
 	Content.HSplitTop(22.0f, &Row, &Content);
 	SLabelProperties Wrap;

@@ -6,6 +6,92 @@
 #include <cmath>
 #include <limits>
 
+TEST(DespitePresets, NinePresetsIncreaseSmoothnessAndPreserveNetworkMargin)
+{
+	int PreviousStrength = 0;
+	for(int Preset = 1; Preset <= 9; ++Preset)
+	{
+		CConfig Config{};
+		Config.m_ClPredictionMargin = 17;
+		Config.m_TcRemoveAnti = Config.m_TcSwapGhosts = Config.m_TcFastInputRepredictHook = 1;
+		ApplyDespitePingPreset(Config, Preset);
+		EXPECT_TRUE(DespiteAntipingEnabled(Config));
+		EXPECT_EQ(Config.m_TcDespitePingPreset, Preset);
+		EXPECT_GT(Config.m_TcDespiteSmoothness, PreviousStrength);
+		EXPECT_LE(Config.m_TcDespiteSmoothness, 100);
+		EXPECT_EQ(Config.m_ClPredictionMargin, 17);
+		EXPECT_EQ(Config.m_ClPredictEvents, 1);
+		EXPECT_EQ(Config.m_ClSubTickAiming, 1);
+		EXPECT_EQ(Config.m_ClPredictDummy, 1);
+		EXPECT_EQ(Config.m_TcRemoveAnti + Config.m_TcSwapGhosts + Config.m_TcFastInputRepredictHook, 0);
+		PreviousStrength = Config.m_TcDespiteSmoothness;
+	}
+}
+
+TEST(DespitePresets, OutOfRangePresetsClampAndManualProfileClearsSelection)
+{
+	CConfig Config{};
+	ApplyDespitePingPreset(Config, -10);
+	EXPECT_EQ(Config.m_TcDespitePingPreset, 1);
+	ApplyDespitePingPreset(Config, 100);
+	EXPECT_EQ(Config.m_TcDespitePingPreset, 9);
+	ApplyDespiteAntipingPreset(Config, 1);
+	EXPECT_EQ(Config.m_TcDespitePingPreset, 0);
+}
+
+TEST(DespiteHammer, CorrectionsCannotRewindOrJumpAnActiveSwing)
+{
+	CDespiteHammerAnimation Hammer;
+	EXPECT_FLOAT_EQ(Hammer.Update(100, 0.04f, 0.01f, false), 0.04f);
+	const float Reconciled = Hammer.Update(101, 0.01f, 0.01f, false);
+	EXPECT_GE(Reconciled, 0.047f);
+	EXPECT_LE(Reconciled, 0.053f);
+	const float Forward = Hammer.Update(101, 0.15f, 0.01f, false);
+	EXPECT_GT(Forward, Reconciled);
+	EXPECT_LE(Forward, Reconciled + 0.01301f);
+	EXPECT_FLOAT_EQ(Hammer.Update(120, 0.005f, 0.01f, false), 0.005f);
+}
+
+TEST(DespiteHammer, ChainedCorrectionsStayContinuousAndRapidTunedAttacksRestart)
+{
+	CDespiteHammerAnimation Hammer;
+	Hammer.Update(100, 0.04f, 0.01f, false);
+	Hammer.Update(101, 0.01f, 0.01f, false);
+	EXPECT_GT(Hammer.Update(102, 0.01f, 0.01f, false), 0.05f);
+	EXPECT_FLOAT_EQ(Hammer.Update(103, 0.005f, 0.01f, false, false), 0.005f);
+}
+
+TEST(DespiteHammer, PausesGapsAndResetDoNotReplayOldSwings)
+{
+	CDespiteHammerAnimation Hammer;
+	Hammer.Update(100, 0.08f, 0.01f, false);
+	EXPECT_FLOAT_EQ(Hammer.Update(100, 0.10f, 0.01f, true), 0.08f);
+	EXPECT_FLOAT_EQ(Hammer.Update(100, 0.10f, 0.0f, false), 0.08f);
+	EXPECT_FLOAT_EQ(Hammer.Update(100, 0.12f, 0.5f, false), 0.12f);
+	EXPECT_FLOAT_EQ(Hammer.Update(100, 5.0f, 0.01f, false), 0.2f);
+	Hammer.Reset();
+	EXPECT_FLOAT_EQ(Hammer.Update(100, 0.03f, 0.01f, false), 0.03f);
+}
+
+TEST(DespiteHammer, UncorrectedSwingProgressIsIndependentOfFrameRate)
+{
+	for(int Fps : {30, 60, 144, 240})
+	{
+		CDespiteHammerAnimation Hammer;
+		Hammer.Update(100, 0.0f, 0.0f, false);
+		for(int Frame = 1; Frame <= Fps / 5; ++Frame)
+			EXPECT_NEAR(Hammer.Update(100, float(Frame) / Fps, 1.0f / Fps, false), float(Frame) / Fps, 0.00001f);
+	}
+}
+
+TEST(DespiteCorrection, StrongerPresetSoftensCorrectionRecoveryFurther)
+{
+	CDespiteCorrectionSmoother Light, Strong;
+	Light.Update(vec2(2, 0), 0.02f, 100, 0, 35, 0);
+	Strong.Update(vec2(2, 0), 0.02f, 100, 0, 90, 0);
+	EXPECT_GT(std::abs(Strong.Update(vec2(0, 0), 0.02f, 100, 0, 90, 0).x), std::abs(Light.Update(vec2(0, 0), 0.02f, 100, 0, 35, 0).x));
+}
+
 // These tests catch loss of adaptation, frame-dependent sampling, stale state,
 // unsafe arithmetic and incomplete/conflicting presets at the actual config boundary.
 TEST(DespiteAntiping, StableEightyMillisecondsUsesSelectedRecoveryPace)

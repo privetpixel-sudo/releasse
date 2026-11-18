@@ -113,8 +113,10 @@ public:
 		const float Limit = 12.0f * std::clamp(Smoothness, 0, 100) / 100.0f * (1.0f - std::clamp(InteractionPriority, 0.0f, 1.0f));
 		if(std::isfinite(DeltaSeconds) && DeltaSeconds > 0.0f)
 		{
-			const float DurationMs = std::clamp(std::clamp(PredictionMs, 0, 800) * 0.35f, 15.0f, 60.0f) +
-						 0.4f * std::clamp(JitterMs, 0.0f, 40.0f);
+			const float Strength = std::clamp(Smoothness, 0, 100) / 100.0f;
+			const float DurationMs = std::min(85.0f, (std::clamp(std::clamp(PredictionMs, 0, 800) * 0.35f, 15.0f, 60.0f) +
+									 0.4f * std::clamp(JitterMs, 0.0f, 40.0f)) *
+									 (0.75f + 0.6f * Strength));
 			m_Offset = m_Offset * std::exp(-DeltaSeconds * 1000.0f / DurationMs) - Correction;
 		}
 		const float Magnitude = length(m_Offset);
@@ -132,6 +134,7 @@ inline float DespiteEffectiveConfidence(float Confidence, float InteractionPrior
 inline void ApplyDespiteAntipingPreset(CConfig &Config, int Profile)
 {
 	Config.m_TcDespiteAntiping = 1;
+	Config.m_TcDespitePingPreset = 0;
 	Config.m_TcDespiteProfile = std::clamp(Profile, 0, 2);
 	Config.m_ClPredict = 1;
 	Config.m_ClAntiPing = 1;
@@ -150,10 +153,14 @@ inline void ApplyDespiteAntipingPreset(CConfig &Config, int Profile)
 	Config.m_TcFastInputAmount = 20;
 }
 
-inline void ApplyDespiteHighPingPreset(CConfig &Config)
+inline void ApplyDespitePingPreset(CConfig &Config, int Preset)
 {
-	ApplyDespiteAntipingPreset(Config, 1);
-	Config.m_TcDespiteSmoothness = 80;
+	constexpr std::array<int, 9> aStrengths = {35, 42, 50, 58, 66, 74, 82, 90, 100};
+	Preset = std::clamp(Preset, 1, 9);
+	ApplyDespiteAntipingPreset(Config, Preset <= 3 ? 0 : Preset == 9 ? 2 :
+									   1);
+	Config.m_TcDespitePingPreset = Preset;
+	Config.m_TcDespiteSmoothness = aStrengths[Preset - 1];
 	Config.m_ClPredictDummy = 1;
 	Config.m_ClPredictEvents = 1;
 	Config.m_ClSubTickAiming = 1;
@@ -164,6 +171,47 @@ inline void ApplyDespiteHighPingPreset(CConfig &Config)
 	Config.m_TcShowOthersGhosts = 0;
 	Config.m_TcSwapGhosts = 0;
 }
+
+inline void ApplyDespiteHighPingPreset(CConfig &Config)
+{
+	ApplyDespitePingPreset(Config, 8);
+}
+
+class CDespiteHammerAnimation
+{
+	int m_AttackTick = -1;
+	float m_Age = 0.0f;
+	bool m_Initialized = false;
+
+public:
+	void Reset() { *this = CDespiteHammerAnimation(); }
+
+	// Pose clock only: never changes attack ticks, hit detection or effects.
+	float Update(int AttackTick, float TargetAge, float DeltaSeconds, bool Paused, bool ReconcileAdjacent = true)
+	{
+		if(!std::isfinite(TargetAge))
+			return m_Age;
+		TargetAge = std::clamp(TargetAge, 0.0f, 0.2f);
+		const int64_t TickDelta = static_cast<int64_t>(AttackTick) - m_AttackTick;
+		const bool NewSwing = !m_Initialized || (ReconcileAdjacent ? std::abs(TickDelta) > 1 : TickDelta != 0);
+		if(Paused && m_Initialized)
+			return m_Age;
+		if(NewSwing || DeltaSeconds > 0.25f || TargetAge >= 0.2f)
+		{
+			m_Initialized = true;
+			m_AttackTick = AttackTick;
+			m_Age = TargetAge;
+		}
+		else if(std::isfinite(DeltaSeconds) && DeltaSeconds > 0.0f)
+		{
+			// Adjacent reconciled attack ticks belong to the same visible swing.
+			m_AttackTick = AttackTick;
+			const float Advance = DeltaSeconds + std::clamp(TargetAge - (m_Age + DeltaSeconds), -DeltaSeconds * 0.3f, DeltaSeconds * 0.3f);
+			m_Age = std::min(0.2f, m_Age + Advance);
+		}
+		return m_Age;
+	}
+};
 
 inline bool DespiteAntipingEnabled(const CConfig &Config)
 {

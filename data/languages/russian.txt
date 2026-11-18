@@ -2692,3 +2692,6 @@ Always predict frozen players
 
 No country flags match your filter criteria
 == 
+
+Ping preset (ms)
+== Пресет пинга (мс)

@@ -786,8 +786,24 @@ void CPlayers::RenderPlayer(
 	}
 
 	const float HammerAnimationTimeScale = 5.0f;
+	float HammerPoseTime = LastAttackTime;
+	if(!RenderGhost && in_range(ClientId, 0, MAX_CLIENTS - 1))
+	{
+		auto &Hammer = GameClient()->m_aClients[ClientId].m_aDespiteHammer[g_Config.m_ClDummy];
+		if(Player.m_Weapon == WEAPON_HAMMER && DespiteAntipingEnabled(g_Config) && g_Config.m_TcDespiteSmoothness > 0 &&
+			Client()->State() == IClient::STATE_ONLINE && GameClient()->m_aClients[ClientId].m_IsPredicted)
+		{
+			const auto &Tuning = GameClient()->m_aClients[ClientId].m_RegularPredicted.m_Tuning;
+			// Very short tuned reloads can represent genuine adjacent-tick attacks.
+			const float MinDelayMs = std::min(float(Tuning.m_HammerFireDelay), float(Tuning.m_HammerHitFireDelay));
+			const bool ReconcileAdjacent = MinDelayMs * Client()->GameTickSpeed() / 1000.0f >= 2.0f;
+			HammerPoseTime = Hammer.Update(Player.m_AttackTick, AttackTime, Client()->RenderFrameTime(), Paused, ReconcileAdjacent);
+		}
+		else
+			Hammer.Reset();
+	}
 	if(Player.m_Weapon == WEAPON_HAMMER)
-		State.Add(&g_pData->m_aAnimations[ANIM_HAMMER_SWING], std::clamp(LastAttackTime * HammerAnimationTimeScale, 0.0f, 1.0f), 1.0f);
+		State.Add(&g_pData->m_aAnimations[ANIM_HAMMER_SWING], std::clamp(HammerPoseTime * HammerAnimationTimeScale, 0.0f, 1.0f), 1.0f);
 	if(Player.m_Weapon == WEAPON_NINJA)
 		State.Add(&g_pData->m_aAnimations[ANIM_NINJA_SWING], std::clamp(LastAttackTime * 2.0f, 0.0f, 1.0f), 1.0f);
 
