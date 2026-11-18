@@ -272,3 +272,127 @@ TEST(DespiteButton, InvalidTimeHoldsStateAndLongFrameStaysBounded)
 	EXPECT_GE(Motion.Scale(0.045f), Before);
 	EXPECT_LE(Motion.Scale(0.045f), 1.045f);
 }
+
+TEST(DespiteInteraction, ProtectsHammerRangeAndAttachedHooks)
+{
+	EXPECT_FLOAT_EQ(DespiteInteractionPriority(80.0f, false), 1.0f);
+	EXPECT_FLOAT_EQ(DespiteInteractionPriority(400.0f, false), 0.0f);
+	EXPECT_FLOAT_EQ(DespiteInteractionPriority(400.0f, true), 1.0f);
+	EXPECT_GT(DespiteInteractionPriority(144.0f, false), 0.0f);
+	EXPECT_LT(DespiteInteractionPriority(144.0f, false), 1.0f);
+	EXPECT_GT(DespiteInteractionPriority(120.0f, false), DespiteInteractionPriority(160.0f, false));
+}
+
+TEST(DespiteCorrection, SmoothsSmallCorrectionWithoutDelayingSteadyMotion)
+{
+	CDespiteCorrectionSmoother Filter;
+	for(int Tick = 0; Tick < 50; ++Tick)
+		EXPECT_EQ(Filter.Update(vec2(0, 0), 0.02f, 100, 0, 80, 0), vec2(0, 0));
+	const vec2 Offset = Filter.Update(vec2(6, 0), 0.02f, 100, 0, 80, 0);
+	EXPECT_LT(Offset.x, 0.0f);
+	EXPECT_GE(Offset.x, -6.0f);
+	vec2 Settled;
+	for(int Tick = 0; Tick < 50; ++Tick)
+		Settled = Filter.Update(vec2(0, 0), 0.02f, 100, 0, 80, 0);
+	EXPECT_NEAR(Settled.x, 0.0f, 0.001f);
+}
+
+TEST(DespiteCorrection, HundredMillisecondCorrectionTraceHasLowerStepEnergy)
+{
+	// 50 Hz movement, alternating four-unit prediction corrections every five
+	// ticks (100 ms). This is a reproducible synthetic trace, not a live RTT claim.
+	CDespiteCorrectionSmoother Filter;
+	float PreviousNoise = 0.0f, PreviousRaw = 0.0f, PreviousDisplay = 0.0f;
+	float RawEnergy = 0.0f, DisplayEnergy = 0.0f;
+	for(int Tick = 1; Tick <= 300; ++Tick)
+	{
+		const float Noise = (Tick / 5) % 2 ? 2.0f : -2.0f;
+		const float Raw = Tick * 6.0f + Noise;
+		const vec2 Offset = Filter.Update(vec2(Noise - PreviousNoise, 0), 0.02f, 100, 8, 80, 0);
+		const float Display = Raw + Offset.x;
+		if(Tick > 10)
+		{
+			RawEnergy += std::pow(Raw - PreviousRaw - 6.0f, 2.0f);
+			DisplayEnergy += std::pow(Display - PreviousDisplay - 6.0f, 2.0f);
+		}
+		EXPECT_LE(std::abs(Offset.x), 12.0f);
+		PreviousNoise = Noise;
+		PreviousRaw = Raw;
+		PreviousDisplay = Display;
+	}
+	EXPECT_LT(DisplayEnergy, RawEnergy * 0.55f);
+}
+
+TEST(DespiteCorrection, ProtectingInteractionsDropsResidualVisualOffset)
+{
+	CDespiteCorrectionSmoother Filter;
+	EXPECT_LT(Filter.Update(vec2(8, 0), 0.02f, 100, 10, 80, 0).x, 0.0f);
+	EXPECT_EQ(Filter.Update(vec2(8, 0), 0.02f, 100, 10, 80, 1), vec2(0, 0));
+	EXPECT_EQ(Filter.Update(vec2(0, 0), 0.02f, 100, 10, 80, 0), vec2(0, 0));
+}
+
+TEST(DespiteCorrection, TeleportResetAndDisabledModeCannotLeaveGhostOffset)
+{
+	CDespiteCorrectionSmoother Filter;
+	EXPECT_LT(Filter.Update(vec2(6, 0), 0.02f, 100, 0, 80, 0).x, 0.0f);
+	EXPECT_EQ(Filter.Update(vec2(1000, 0), 0.02f, 100, 0, 80, 0), vec2(0, 0));
+	Filter.Update(vec2(6, 0), 0.02f, 100, 0, 80, 0);
+	EXPECT_EQ(Filter.Update(vec2(0, 0), 0.02f, 100, 0, 0, 0), vec2(0, 0));
+	Filter.Update(vec2(6, 0), 0.02f, 100, 0, 80, 0);
+	Filter.Reset();
+	EXPECT_EQ(Filter.Update(vec2(0, 0), 0.02f, 100, 0, 80, 0), vec2(0, 0));
+}
+
+TEST(DespiteCorrection, DecayDependsOnElapsedTimeAndOffsetRemainsBounded)
+{
+	CDespiteCorrectionSmoother Slow, Fast;
+	Slow.Update(vec2(8, 0), 0.02f, 100, 5, 100, 0);
+	Fast.Update(vec2(8, 0), 0.02f, 100, 5, 100, 0);
+	vec2 A, B;
+	for(int Frame = 0; Frame < 6; ++Frame)
+		A = Slow.Update(vec2(0, 0), 1.0f / 60.0f, 100, 5, 100, 0);
+	for(int Frame = 0; Frame < 24; ++Frame)
+		B = Fast.Update(vec2(0, 0), 1.0f / 240.0f, 100, 5, 100, 0);
+	EXPECT_NEAR(A.x, B.x, 0.0001f);
+	EXPECT_LT(A.x, 0.0f);
+	for(int Tick = 0; Tick < 200; ++Tick)
+		EXPECT_LE(length(Slow.Update(vec2(10, 10), 0.02f, 100, 20, 100, 0)), 12.001f);
+}
+
+TEST(DespiteAntiping, HighPingSetupEnablesAimAndFeedbackWithoutExtraNetworkDelay)
+{
+	CConfig Config{};
+	Config.m_ClPredictionMargin = 17;
+	Config.m_TcRemoveAnti = 1;
+	Config.m_TcUnpredOthersInFreeze = 1;
+	Config.m_TcSwapGhosts = 1;
+	Config.m_TcFastInputRepredictHook = 1;
+	ApplyDespiteHighPingPreset(Config);
+	EXPECT_TRUE(DespiteAntipingEnabled(Config));
+	EXPECT_EQ(Config.m_ClSubTickAiming, 1);
+	EXPECT_EQ(Config.m_ClPredictEvents, 1);
+	EXPECT_EQ(Config.m_ClPredictDummy, 1);
+	EXPECT_EQ(Config.m_TcFastInputRepredictHook, 0);
+	EXPECT_EQ(Config.m_TcRemoveAnti, 0);
+	EXPECT_EQ(Config.m_TcUnpredOthersInFreeze, 0);
+	EXPECT_EQ(Config.m_TcSwapGhosts, 0);
+	EXPECT_EQ(Config.m_ClPredictionMargin, 17);
+	EXPECT_GT(Config.m_TcDespiteSmoothness, 65);
+}
+
+TEST(DespiteCorrection, SkippedPredictionTicksNeverSmoothOrdinaryMotion)
+{
+	CDespiteCorrectionSmoother Filter;
+	EXPECT_LT(Filter.Update(vec2(6, 0), 0.02f, 100, 0, 80, 0).x, 0.0f);
+	// At 30 FPS, two or more 50 Hz ticks can pass between predictions. An old
+	// world advanced only once cannot be compared with the new final position.
+	EXPECT_EQ(Filter.Update(vec2(6, 0), 0.04f, 100, 0, 80, 0, false), vec2(0, 0));
+	EXPECT_EQ(Filter.Update(vec2(0, 0), 0.02f, 100, 0, 80, 0), vec2(0, 0));
+}
+
+TEST(DespiteInteraction, PrecisionPriorityAlsoOverridesLowConfidenceDistanceLimit)
+{
+	EXPECT_FLOAT_EQ(DespiteEffectiveConfidence(0.1f, 1.0f), 1.0f);
+	EXPECT_FLOAT_EQ(DespiteEffectiveConfidence(0.1f, 0.0f), 0.1f);
+	EXPECT_FLOAT_EQ(DespiteEffectiveConfidence(0.1f, 0.5f), 0.55f);
+}

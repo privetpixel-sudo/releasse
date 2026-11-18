@@ -43,8 +43,13 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	}
 	Content.HSplitTop(6.0f, nullptr, &Content);
 	Content.HSplitTop(22.0f, &Row, &Content);
+	CUIRect HighPing;
+	Row.VSplitRight(140.0f, &Row, &HighPing);
 	TextRender()->TextColor(DespiteTheme::Muted());
 	Ui()->DoLabel(&Row, TCLocalize("Adaptive antiping"), 13.0f, TEXTALIGN_ML);
+	static DespiteTheme::CButton s_HighPing;
+	if(DespiteTheme::Link(Ui(), TextRender(), &s_HighPing, HighPing, TCLocalize("100 ms setup")))
+		ApplyDespiteHighPingPreset(g_Config);
 	Content.HSplitTop(20.0f, nullptr, &Content);
 
 	CUIRect Profiles, Button;

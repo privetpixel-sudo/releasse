@@ -553,6 +553,7 @@ public:
 		//vec2 m_DebugVector3 = vec2(0, 0);
 		float m_Uncertainty = 0.0f;
 		std::array<CDespitePredictionBlend, NUM_DUMMIES> m_aDespiteBlend;
+		std::array<CDespiteCorrectionSmoother, NUM_DUMMIES> m_aDespiteCorrection;
 		float m_VolleyBallAngle = 0.0f;
 		bool m_IsVolleyBall = false;
 

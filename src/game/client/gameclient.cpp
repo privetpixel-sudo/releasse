@@ -3066,6 +3066,9 @@ void CGameClient::OnPredict()
 		int PredTime = std::clamp(Client()->GetPredictionTime(), 0, 8000); // Milliseconds for some reason?? TODO: Use more precision
 		const int PredEndTick = FinalTickRegular;
 		const int SmoothTick = PredEndTick;
+		// The old world below advances once. Frame hitches can skip ticks;
+		// in that case its position must never be treated as a same-time error.
+		const bool ComparableCorrection = static_cast<int64_t>(m_PredSmoothingWorld.m_GameTick) + 1 == PredEndTick;
 		const int PreviousBlendTick = m_aDespiteBlendTick[g_Config.m_ClDummy];
 		const bool ResetBlend = PreviousBlendTick < 0 || PredEndTick < PreviousBlendTick;
 		const float BlendSeconds = ResetBlend ? 0.0f : static_cast<float>(PredEndTick - PreviousBlendTick) / Client()->GameTickSpeed();
@@ -3110,12 +3113,14 @@ void CGameClient::OnPredict()
 			{
 				m_aClients[i].m_ValidAntipingSmooth = false;
 				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
+				m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy].Reset();
 				continue;
 			}
 
 			if(i == m_aLocalIds[!g_Config.m_ClDummy] || i == m_Snap.m_LocalClientId)
 			{
 				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
+				m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy].Reset();
 				m_aClients[i].m_PrevImprovedPredPos = m_aClients[i].m_PrevPredicted.m_Pos;
 				m_aClients[i].m_ImprovedPredPos = m_aClients[i].m_Predicted.m_Pos;
 				continue;
@@ -3123,7 +3128,11 @@ void CGameClient::OnPredict()
 
 			CCharacter *pChar = m_PredSmoothingWorld.GetCharacterById(i);
 			if(!pChar)
+			{
+				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
+				m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy].Reset();
 				continue;
+			}
 
 			vec2 PredPos = m_aClients[i].m_RegularPredicted.m_Pos;
 
@@ -3187,6 +3196,7 @@ void CGameClient::OnPredict()
 			if(!ValidRecentPositions || !FoundBoundingBox || HistoryCount == 0 || /*HistoryDistance <= 0.0f ||*/ GameTick <= 0)
 			{
 				m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
+				m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy].Reset();
 				m_aClients[i].m_PrevImprovedPredPos = PrevPredPos;
 				m_aClients[i].m_ImprovedPredPos = PredPos;
 				continue;
@@ -3255,25 +3265,61 @@ void CGameClient::OnPredict()
 			if(!g_Config.m_TcAntiPingStableDirection)
 				TrustFactor = 0.0f;
 
+			const auto &LocalCore = m_aClients[m_Snap.m_LocalClientId].m_RegularPredicted;
+			const auto &OtherCore = m_aClients[i].m_RegularPredicted;
+			bool Interacting = pChar->IsInterfering() || LocalCore.HookedPlayer() == i || OtherCore.HookedPlayer() == m_Snap.m_LocalClientId;
+			float InteractionDistance = distance(PredPos, LocalCore.m_Pos);
+			if(PredictDummy() && in_range(m_aLocalIds[!g_Config.m_ClDummy], 0, MAX_CLIENTS - 1) &&
+				m_Snap.m_aCharacters[m_aLocalIds[!g_Config.m_ClDummy]].m_Active &&
+				m_RegularPredictedWorld.GetCharacterById(m_aLocalIds[!g_Config.m_ClDummy]))
+			{
+				const int DummyId = m_aLocalIds[!g_Config.m_ClDummy];
+				const auto &DummyCore = m_aClients[DummyId].m_RegularPredicted;
+				Interacting |= DummyCore.HookedPlayer() == i || OtherCore.HookedPlayer() == DummyId;
+				InteractionDistance = std::min(InteractionDistance, distance(PredPos, DummyCore.m_Pos));
+			}
+			const float InteractionPriority = UseDespiteAntiping ? DespiteInteractionPriority(InteractionDistance, Interacting) : 0.0f;
+			const bool Teleported = distance(ServerPos, PrevServerPos) > 600.0f || distance(PredPos, PrevPredPos) > 600.0f;
 			vec2 Weights(std::max(TrustFactor, NewConfidence), NewConfidence);
 			auto &Blend = m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy];
-			if(ResetBlend || distance(ServerPos, PrevServerPos) > 600.0f || distance(PredPos, PrevPredPos) > 600.0f)
+			if(ResetBlend || Teleported || InteractionPriority >= 1.0f)
 				Blend.Reset();
 			if(UseDespiteAntiping)
+			{
+				Weights = mix(Weights, vec2(1, 1), InteractionPriority);
 				Weights = Blend.Update(Weights, BlendSeconds, g_Config.m_TcDespiteProfile, DespiteAntiping.JitterMs(), g_Config.m_TcDespiteSmoothness);
+				Weights = mix(Weights, vec2(1, 1), InteractionPriority);
+			}
 			else
 				Blend.Reset();
 			vec2 ConfidenceVector = ConfidenceParallel * Weights.x + ConfidencePerp * Weights.y;
 
 			// Minor safe guard against insane predictions
+			const float EffectiveConfidence = UseDespiteAntiping ? DespiteEffectiveConfidence(NewConfidence, InteractionPriority) : NewConfidence;
 			if(length(ConfidenceVector) > HistoryDistance)
-				ConfidenceVector = mix(normalize(ConfidenceVector) * HistoryDistance, ConfidenceVector, NewConfidence);
+				ConfidenceVector = mix(normalize(ConfidenceVector) * HistoryDistance, ConfidenceVector, EffectiveConfidence);
 
 			vec2 ConfidencePos = ServerPos + ConfidenceVector;
 
 			// Clamp final position to bounding box
 			ConfidencePos.x = std::clamp(ConfidencePos.x, MinPos.x, MaxPos.x);
 			ConfidencePos.y = std::clamp(ConfidencePos.y, MinPos.y, MaxPos.y);
+			auto &Correction = m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy];
+			if(UseDespiteAntiping && !ResetBlend && !Teleported && pChar->m_FreezeTime == 0)
+			{
+				const float ConfidenceWeight = std::min(Weights.x, Weights.y);
+				const vec2 Offset = Correction.Update((PredPos - PrevPredPos) * ConfidenceWeight, BlendSeconds, PredTime,
+					DespiteAntiping.JitterMs(), g_Config.m_TcDespiteSmoothness, InteractionPriority, ComparableCorrection);
+				vec2 Candidate = ConfidencePos + Offset;
+				Candidate.x = std::clamp(Candidate.x, MinPos.x, MaxPos.x);
+				Candidate.y = std::clamp(Candidate.y, MinPos.y, MaxPos.y);
+				if(Offset != vec2(0, 0) && Collision()->TestBox(Candidate, CCharacterCore::PhysicalSizeVec2()))
+					Correction.Reset();
+				else
+					ConfidencePos = Candidate;
+			}
+			else
+				Correction.Reset();
 
 			m_aClients[i].m_PrevImprovedPredPos = m_aClients[i].m_ImprovedPredPos;
 			m_aClients[i].m_ImprovedPredPos = ConfidencePos;
@@ -3468,6 +3514,8 @@ void CGameClient::CClientData::Reset()
 {
 	for(auto &Blend : m_aDespiteBlend)
 		Blend.Reset();
+	for(auto &Correction : m_aDespiteCorrection)
+		Correction.Reset();
 	m_UseCustomColor = 0;
 	m_ColorBody = 0;
 	m_ColorFeet = 0;
@@ -4250,6 +4298,7 @@ void CGameClient::UpdateRenderedCharacters()
 		if(!m_Snap.m_aCharacters[i].m_Active)
 		{
 			m_aClients[i].m_aDespiteBlend[g_Config.m_ClDummy].Reset();
+			m_aClients[i].m_aDespiteCorrection[g_Config.m_ClDummy].Reset();
 			continue;
 		}
 		m_aClients[i].m_RenderCur = m_Snap.m_aCharacters[i].m_Cur;

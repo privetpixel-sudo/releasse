@@ -82,6 +82,53 @@ public:
 	}
 };
 
+inline float DespiteInteractionPriority(float Distance, bool Interacting)
+{
+	if(Interacting)
+		return 1.0f;
+	if(!std::isfinite(Distance))
+		return 0.0f;
+	// Full prediction around hammer range; ease into visual smoothing farther away.
+	const float T = std::clamp((Distance - 96.0f) / 96.0f, 0.0f, 1.0f);
+	return 1.0f - T * T * (3.0f - 2.0f * T);
+}
+
+class CDespiteCorrectionSmoother
+{
+	vec2 m_Offset = vec2(0, 0);
+
+public:
+	void Reset() { m_Offset = vec2(0, 0); }
+
+	// Correction compares old/new predictions at the SAME simulation tick.
+	// Ordinary velocity is never filtered, so steady motion acquires no extra lag.
+	vec2 Update(vec2 Correction, float DeltaSeconds, int PredictionMs, float JitterMs, int Smoothness, float InteractionPriority, bool ComparablePrediction = true)
+	{
+		if(!ComparablePrediction || Smoothness <= 0 || InteractionPriority >= 1.0f || DeltaSeconds > 0.25f ||
+			!std::isfinite(Correction.x) || !std::isfinite(Correction.y) || length(Correction) > 128.0f)
+		{
+			Reset();
+			return m_Offset;
+		}
+		const float Limit = 12.0f * std::clamp(Smoothness, 0, 100) / 100.0f * (1.0f - std::clamp(InteractionPriority, 0.0f, 1.0f));
+		if(std::isfinite(DeltaSeconds) && DeltaSeconds > 0.0f)
+		{
+			const float DurationMs = std::clamp(std::clamp(PredictionMs, 0, 800) * 0.35f, 15.0f, 60.0f) +
+						 0.4f * std::clamp(JitterMs, 0.0f, 40.0f);
+			m_Offset = m_Offset * std::exp(-DeltaSeconds * 1000.0f / DurationMs) - Correction;
+		}
+		const float Magnitude = length(m_Offset);
+		if(Magnitude > Limit && Magnitude > 0.0f)
+			m_Offset *= Limit / Magnitude;
+		return m_Offset;
+	}
+};
+
+inline float DespiteEffectiveConfidence(float Confidence, float InteractionPriority)
+{
+	return mix(std::clamp(Confidence, 0.0f, 1.0f), 1.0f, std::clamp(InteractionPriority, 0.0f, 1.0f));
+}
+
 inline void ApplyDespiteAntipingPreset(CConfig &Config, int Profile)
 {
 	Config.m_TcDespiteAntiping = 1;
@@ -101,6 +148,21 @@ inline void ApplyDespiteAntipingPreset(CConfig &Config, int Profile)
 	Config.m_TcAntiPingNegativeBuffer = Profile == 2 ? 1 : 0;
 	Config.m_TcFastInput = 1;
 	Config.m_TcFastInputAmount = 20;
+}
+
+inline void ApplyDespiteHighPingPreset(CConfig &Config)
+{
+	ApplyDespiteAntipingPreset(Config, 1);
+	Config.m_TcDespiteSmoothness = 80;
+	Config.m_ClPredictDummy = 1;
+	Config.m_ClPredictEvents = 1;
+	Config.m_ClSubTickAiming = 1;
+	Config.m_TcFastInputRepredictHook = 0;
+	Config.m_TcFastInputOthers = 0;
+	Config.m_TcRemoveAnti = 0;
+	Config.m_TcUnpredOthersInFreeze = 0;
+	Config.m_TcShowOthersGhosts = 0;
+	Config.m_TcSwapGhosts = 0;
 }
 
 inline bool DespiteAntipingEnabled(const CConfig &Config)
