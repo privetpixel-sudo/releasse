@@ -69,6 +69,7 @@ MACRO_CONFIG_INT(TcAntiPingUncertaintyScale, tc_antiping_uncertainty_scale, 150,
 
 // Ðespiтe Tater: opt in through the dedicated TClient subtab.
 MACRO_CONFIG_INT(TcDespiteAntiping, tc_despite_antiping, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Adapt improved antiping recovery to prediction-time jitter")
+MACRO_CONFIG_INT(TcDespiteAutoPing, tc_despite_auto_ping, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Automatically tune Despite smoothing from live server-reported ping")
 MACRO_CONFIG_INT(TcDespiteProfile, tc_despite_profile, 1, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Despite antiping profile (0 = responsive, 1 = balanced, 2 = smooth)")
 MACRO_CONFIG_INT(TcDespitePingPreset, tc_despite_ping_preset, 0, 0, 9, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Despite ping preset selected in menu (0 = custom, 1..9 = 30..100+ ms)")
 MACRO_CONFIG_INT(TcDespiteSmoothness, tc_despite_smoothness, 65, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Soften visual prediction confidence changes (0 = off, 100 = strongest)")

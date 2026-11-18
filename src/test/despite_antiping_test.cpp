@@ -6,6 +6,170 @@
 #include <cmath>
 #include <limits>
 
+TEST(DespiteAutoPing, StableServerLatencySelectsAllNinePresets)
+{
+	for(int Preset = 1; Preset <= 9; ++Preset)
+	{
+		CDespiteAutoPing Auto;
+		Auto.Observe(1, 50, Preset == 9 ? 150 : 20 + Preset * 10, 0);
+		EXPECT_TRUE(Auto.Ready());
+		EXPECT_EQ(Auto.Preset(), Preset);
+		CConfig Expected{};
+		ApplyDespitePingPreset(Expected, Preset);
+		EXPECT_EQ(Auto.Profile(), Expected.m_TcDespiteProfile);
+		EXPECT_EQ(Auto.Smoothness(), Expected.m_TcDespiteSmoothness);
+	}
+}
+
+TEST(DespiteAutoPing, DuplicateTicksCannotAccelerateTuningAndBoundaryNoiseDoesNotSwitch)
+{
+	CDespiteAutoPing Auto;
+	Auto.Observe(1, 50, 74, 0);
+	for(int Frame = 0; Frame < 500; ++Frame)
+		Auto.Observe(1, 50, 200, 30);
+	EXPECT_FLOAT_EQ(Auto.PingMs(), 74.0f);
+	for(int Tick = 2; Tick <= 1500; ++Tick)
+		Auto.Observe(Tick, 50, Tick % 2 ? 74 : 76, 0);
+	EXPECT_EQ(Auto.Preset(), 5);
+}
+
+TEST(DespiteAutoPing, BriefSpikeIsIgnoredButSustainedChangesRetuneWithSlowerRelease)
+{
+	CDespiteAutoPing Auto;
+	Auto.Observe(0, 50, 40, 0);
+	Auto.Observe(1, 50, 180, 0);
+	for(int Tick = 2; Tick <= 100; ++Tick)
+		Auto.Observe(Tick, 50, 40, 0);
+	EXPECT_EQ(Auto.Preset(), 2);
+	for(int Tick = 101; Tick <= 350; ++Tick)
+		Auto.Observe(Tick, 50, 130, 0);
+	EXPECT_EQ(Auto.Preset(), 9);
+	for(int Tick = 351; Tick <= 400; ++Tick)
+		Auto.Observe(Tick, 50, 40, 0);
+	EXPECT_EQ(Auto.Preset(), 9);
+	for(int Tick = 401; Tick <= 800; ++Tick)
+		Auto.Observe(Tick, 50, 40, 0);
+	EXPECT_EQ(Auto.Preset(), 2);
+}
+
+TEST(DespiteAutoPing, StrengthEasesAndPredictionJitterAddsBoundedProtection)
+{
+	CDespiteAutoPing Stable, Unstable;
+	Stable.Observe(0, 50, 80, 0);
+	Unstable.Observe(0, 50, 80, 0);
+	for(int Tick = 1; Tick <= 250; ++Tick)
+	{
+		const int Previous = Unstable.Smoothness();
+		Stable.Observe(Tick, 50, 80, 0);
+		Unstable.Observe(Tick, 50, 80, 40);
+		EXPECT_LE(std::abs(Unstable.Smoothness() - Previous), 3);
+	}
+	EXPECT_GT(Unstable.Smoothness(), Stable.Smoothness());
+	EXPECT_LE(Unstable.Smoothness(), Stable.Smoothness() + 10);
+	EXPECT_LE(Unstable.Smoothness(), 100);
+}
+
+TEST(DespiteAutoPing, AdaptationUsesElapsedSnapshotTime)
+{
+	CDespiteAutoPing Slow, Fast;
+	Slow.Observe(0, 50, 40, 0);
+	Fast.Observe(0, 50, 40, 0);
+	for(int Tick = 1; Tick <= 250; ++Tick)
+	{
+		Fast.Observe(Tick, 50, 100, 8);
+		if(Tick % 2 == 0)
+			Slow.Observe(Tick, 50, 100, 8);
+	}
+	EXPECT_NEAR(Slow.PingMs(), Fast.PingMs(), 0.001f);
+	EXPECT_EQ(Slow.Preset(), Fast.Preset());
+	EXPECT_NEAR(Slow.Smoothness(), Fast.Smoothness(), 1);
+}
+
+TEST(DespiteAutoPing, ResetRewindLongGapAndMissingLatencyCannotReuseOldHistory)
+{
+	CDespiteAutoPing Auto;
+	Auto.Observe(100, 50, 150, 20);
+	Auto.Observe(1, 50, 30, 0);
+	EXPECT_EQ(Auto.Preset(), 1);
+	Auto.Observe(1000, 50, 100, 0);
+	EXPECT_EQ(Auto.Preset(), 8);
+	Auto.Reset();
+	EXPECT_FALSE(Auto.Ready());
+	Auto.Observe(1, 50, -1, 0);
+	EXPECT_FALSE(Auto.Ready());
+	Auto.Observe(2, 50, std::numeric_limits<int>::max(), std::numeric_limits<float>::quiet_NaN());
+	EXPECT_TRUE(Auto.Ready());
+	EXPECT_EQ(Auto.Preset(), 9);
+	EXPECT_LE(Auto.Smoothness(), 100);
+}
+
+TEST(DespiteAutoPing, EnablingPreservesManualChoicesAndManualPresetsDisableAuto)
+{
+	CConfig Config{};
+	Config.m_TcDespiteProfile = 0;
+	Config.m_TcDespiteSmoothness = 47;
+	Config.m_TcDespitePingPreset = 3;
+	Config.m_ClPredictionMargin = 17;
+	ApplyDespiteAutoPing(Config);
+	EXPECT_TRUE(DespiteAntipingEnabled(Config));
+	EXPECT_EQ(Config.m_TcDespiteAutoPing, 1);
+	EXPECT_EQ(Config.m_TcDespiteProfile, 0);
+	EXPECT_EQ(Config.m_TcDespiteSmoothness, 47);
+	EXPECT_EQ(Config.m_TcDespitePingPreset, 3);
+	EXPECT_EQ(Config.m_ClPredictionMargin, 17);
+	ApplyDespitePingPreset(Config, 8);
+	EXPECT_EQ(Config.m_TcDespiteAutoPing, 0);
+	Config.m_TcDespiteAutoPing = 1;
+	ApplyDespiteAntipingPreset(Config, 1);
+	EXPECT_EQ(Config.m_TcDespiteAutoPing, 0);
+}
+
+TEST(DespiteAutoPing, RuntimeSettingsFollowMeasurementWhileManualFallbackRemainsIntact)
+{
+	CConfig Config{};
+	Config.m_TcDespiteSmoothness = 47;
+	Config.m_TcDespiteProfile = 2;
+	ApplyDespiteAutoPing(Config);
+	CDespiteAutoPing Auto;
+	EXPECT_EQ(DespiteRuntimeSmoothness(Config, Auto), 47);
+	Auto.Observe(1, 50, 40, 0);
+	EXPECT_EQ(DespiteRuntimeSmoothness(Config, Auto), 42);
+	EXPECT_EQ(DespiteRuntimeProfile(Config, Auto), 0);
+	EXPECT_EQ(Config.m_TcDespiteSmoothness, 47);
+	EXPECT_EQ(Config.m_TcDespiteProfile, 2);
+	Config.m_TcDespiteAntiping = 0;
+	EXPECT_EQ(DespiteRuntimeSmoothness(Config, Auto), 47);
+	Config.m_TcDespiteAntiping = 1;
+	Config.m_TcDespiteAutoPing = 0;
+	EXPECT_EQ(DespiteRuntimeSmoothness(Config, Auto), 47);
+}
+
+TEST(DespiteAutoPing, ManualSliderPreservesAdvancedPreferencesAndOnlyAdoptsAnActiveAutoProfile)
+{
+	CDespiteAutoPing Auto;
+	Auto.Observe(1, 50, 40, 0);
+	for(bool Enabled : {false, true})
+	{
+		CConfig Config{};
+		ApplyDespiteAntipingPreset(Config, 0);
+		Config.m_TcDespiteAntiping = Enabled;
+		Config.m_TcAntiPingNegativeBuffer = 1;
+		SetDespiteManualSmoothness(Config, Auto, 53);
+		EXPECT_EQ(Config.m_TcAntiPingNegativeBuffer, 1);
+		EXPECT_EQ(Config.m_TcDespiteSmoothness, 53);
+		EXPECT_EQ(Config.m_TcDespiteAntiping, Enabled);
+	}
+	CConfig Config{};
+	ApplyDespiteAutoPing(Config);
+	Config.m_TcDespiteProfile = 2;
+	Config.m_TcAntiPingNegativeBuffer = 1;
+	SetDespiteManualSmoothness(Config, Auto, 43);
+	EXPECT_EQ(Config.m_TcDespiteAutoPing, 0);
+	EXPECT_EQ(Config.m_TcDespiteProfile, 0);
+	EXPECT_EQ(Config.m_TcAntiPingNegativeBuffer, 0);
+	EXPECT_EQ(Config.m_TcDespiteSmoothness, 43);
+}
+
 TEST(DespitePresets, NinePresetsIncreaseSmoothnessAndPreserveNetworkMargin)
 {
 	int PreviousStrength = 0;

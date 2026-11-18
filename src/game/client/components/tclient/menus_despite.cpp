@@ -22,7 +22,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	CUIRect Content = MainView;
 	Content.VMargin(4.0f, &Content);
 	Content.y += 4.0f; // Leave room for scaled/lifted button faces inside the clip.
-	Content.h = s_Details ? 470.0f : 390.0f;
+	Content.h = s_Details ? 490.0f : 410.0f;
 	s_Scroll.AddRect(Content);
 	const float Width = std::min(540.0f, Content.w);
 	Content.x += (Content.w - Width) / 2.0f;
@@ -31,7 +31,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	Content.HSplitTop(32.0f, &Row, &Content);
 	Row.VSplitRight(122.0f, &Title, &Toggle);
 	TextRender()->TextColor(DespiteTheme::Text());
-	Ui()->DoLabel(&Title, "Ðespiтe", 24.0f, TEXTALIGN_ML);
+	Ui()->DoLabel(&Title, "releasse", 24.0f, TEXTALIGN_ML);
 	const bool Enabled = DespiteAntipingEnabled(g_Config);
 	static DespiteTheme::CButton s_Enable;
 	if(DespiteTheme::Button(Ui(), TextRender(), &s_Enable, Toggle, Enabled ? TCLocalize("Turn off") : TCLocalize("Enable antiping"), !Enabled))
@@ -40,7 +40,9 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 			g_Config.m_TcDespiteAntiping = 0;
 		else
 		{
-			if(g_Config.m_TcDespitePingPreset > 0)
+			if(g_Config.m_TcDespiteAutoPing)
+				ApplyDespiteAutoPing(g_Config);
+			else if(g_Config.m_TcDespitePingPreset > 0)
 				ApplyDespitePingPreset(g_Config, g_Config.m_TcDespitePingPreset);
 			else
 				ApplyDespiteAntipingPreset(g_Config, g_Config.m_TcDespiteProfile);
@@ -51,8 +53,18 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	TextRender()->TextColor(DespiteTheme::Muted());
 	Ui()->DoLabel(&Row, TCLocalize("Adaptive antiping"), 13.0f, TEXTALIGN_ML);
 	Content.HSplitTop(14.0f, nullptr, &Content);
-	Content.HSplitTop(20.0f, &Row, &Content);
+	Content.HSplitTop(30.0f, &Row, &Content);
+	CUIRect AutoButton;
+	Row.VSplitRight(92.0f, &Row, &AutoButton);
 	Ui()->DoLabel(&Row, TCLocalize("Ping preset (ms)"), 12.0f, TEXTALIGN_ML);
+	static DespiteTheme::CButton s_Auto;
+	AutoButton.Margin(3.0f, &AutoButton);
+	if(DespiteTheme::Choice(Ui(), TextRender(), &s_Auto, AutoButton, TCLocalize("Auto ping"), g_Config.m_TcDespiteAutoPing != 0))
+	{
+		ApplyDespiteAutoPing(g_Config);
+		for(auto &Auto : GameClient()->m_aDespiteAutoPing)
+			Auto.Reset();
+	}
 	static DespiteTheme::CButton s_aPingPresets[9];
 	const char *apPings[] = {"30", "40", "50", "60", "70", "80", "90", "100", "100+"};
 	const int Columns = Content.w >= 440.0f ? 9 : 5;
@@ -65,7 +77,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 			CUIRect Cell;
 			Row.VSplitLeft(CellWidth, &Cell, &Row);
 			Cell.Margin(3.0f, &Cell);
-			if(DespiteTheme::Choice(Ui(), TextRender(), &s_aPingPresets[Preset], Cell, apPings[Preset], g_Config.m_TcDespitePingPreset == Preset + 1))
+			if(DespiteTheme::Choice(Ui(), TextRender(), &s_aPingPresets[Preset], Cell, apPings[Preset], !g_Config.m_TcDespiteAutoPing && g_Config.m_TcDespitePingPreset == Preset + 1))
 				ApplyDespitePingPreset(g_Config, Preset + 1);
 		}
 	}
@@ -82,8 +94,9 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	{
 		Profiles.VSplitLeft(ProfileWidth, &Button, &Profiles);
 		Button.VMargin(2.0f, &Button);
-		if(DespiteTheme::Choice(Ui(), TextRender(), &s_aProfiles[Profile], Button, apNames[Profile], Profile == g_Config.m_TcDespiteProfile))
+		if(DespiteTheme::Choice(Ui(), TextRender(), &s_aProfiles[Profile], Button, apNames[Profile], Profile == GameClient()->DespiteProfile()))
 		{
+			g_Config.m_TcDespiteAutoPing = 0;
 			g_Config.m_TcDespitePingPreset = 0;
 			if(Enabled)
 				ApplyDespiteAntipingPreset(g_Config, Profile);
@@ -94,10 +107,11 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	TextRender()->TextColor(TextRender()->DefaultTextColor());
 	Content.HSplitTop(15.0f, nullptr, &Content);
 	Content.HSplitTop(24.0f, &Row, &Content);
-	const int PreviousSmoothness = g_Config.m_TcDespiteSmoothness;
-	Ui()->DoScrollbarOption(&g_Config.m_TcDespiteSmoothness, &g_Config.m_TcDespiteSmoothness, &Row, TCLocalize("Smoothness"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
-	if(PreviousSmoothness != g_Config.m_TcDespiteSmoothness)
-		g_Config.m_TcDespitePingPreset = 0;
+	int Smoothness = GameClient()->DespiteSmoothness();
+	const int PreviousSmoothness = Smoothness;
+	Ui()->DoScrollbarOption(&g_Config.m_TcDespiteSmoothness, &Smoothness, &Row, TCLocalize("Smoothness"), 0, 100, &CUi::ms_LinearScrollbarScale, 0, "%");
+	if(PreviousSmoothness != Smoothness)
+		SetDespiteManualSmoothness(g_Config, GameClient()->m_aDespiteAutoPing[g_Config.m_ClDummy], Smoothness);
 	Content.HSplitTop(9.0f, nullptr, &Content);
 	Content.HSplitTop(22.0f, &Row, &Content);
 	SLabelProperties Wrap;
@@ -117,7 +131,12 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 	CUIRect Details;
 	Row.VSplitRight(100.0f, &Row, &Details);
 	char aStatus[192];
-	if(pInfo)
+	const auto &Auto = GameClient()->m_aDespiteAutoPing[g_Config.m_ClDummy];
+	if(g_Config.m_TcDespiteAutoPing && Enabled && Auto.Ready() && !Client()->ConnectionProblems() && pInfo)
+		str_format(aStatus, sizeof(aStatus), "%s / %d ms / %s %s / %d%%", Active ? TCLocalize("Active") : TCLocalize("Inactive"), pInfo->m_Latency, TCLocalize("Auto ping"), apPings[Auto.Preset() - 1], Auto.Smoothness());
+	else if(g_Config.m_TcDespiteAutoPing && Enabled)
+		str_copy(aStatus, TCLocalize("Auto ping: waiting for live latency"));
+	else if(pInfo)
 		str_format(aStatus, sizeof(aStatus), "%s / %d ms", Active ? TCLocalize("Active") : TCLocalize("Inactive"), pInfo->m_Latency);
 	else
 		str_copy(aStatus, TCLocalize("Connect to see live values"));
@@ -132,7 +151,7 @@ void CMenus::RenderSettingsDespite(CUIRect MainView)
 		Content.HSplitTop(23.0f, &Row, &Content);
 		const auto &Filter = GameClient()->m_aDespiteAntiping[g_Config.m_ClDummy];
 		if(Active)
-			str_format(aStatus, sizeof(aStatus), "%s: %.1f ms / %s: %.2fx", TCLocalize("Prediction variation"), Filter.JitterMs(), TCLocalize("Recovery scale"), Filter.RecoveryScale(g_Config.m_TcDespiteProfile));
+			str_format(aStatus, sizeof(aStatus), "%s: %.1f ms / %s: %.2fx", TCLocalize("Prediction variation"), Filter.JitterMs(), TCLocalize("Recovery scale"), Filter.RecoveryScale(GameClient()->DespiteProfile()));
 		else
 			str_copy(aStatus, TCLocalize("Adaptive recovery inactive"));
 		Ui()->DoLabel(&Row, aStatus, 11.0f, TEXTALIGN_ML);

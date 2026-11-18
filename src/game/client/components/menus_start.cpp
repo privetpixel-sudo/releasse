@@ -1,5 +1,5 @@
 /* (c) Magnus Auvinen. See licence.txt in the root of the distribution for more information. */
-/* Modified for Ðespiтe Tater: graphite theme inspired by the supplied launcher reference. */
+/* Modified for releasse: graphite theme inspired by the supplied launcher reference. */
 #include "menus_start.h"
 
 #include <engine/font_icons.h>
@@ -23,10 +23,10 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	Header.VSplitRight(70.0f, &Brand, &Quit);
 	Brand.VSplitLeft(28.0f, &Mark, &Brand);
 	DespiteTheme::Surface(Mark, 9.0f);
-	Ui()->DoLabel(&Mark, "Ð", 18.0f, TEXTALIGN_MC);
+	Ui()->DoLabel(&Mark, "r", 18.0f, TEXTALIGN_MC);
 	Brand.VSplitLeft(9.0f, nullptr, &Brand);
 	TextRender()->TextColor(DespiteTheme::Text());
-	Ui()->DoLabel(&Brand, "Ðespiтe", 14.0f, TEXTALIGN_ML);
+	Ui()->DoLabel(&Brand, "releasse", 14.0f, TEXTALIGN_ML);
 	static DespiteTheme::CButton s_Quit;
 	const bool Escape = Ui()->ConsumeHotkey(CUi::HOTKEY_ESCAPE);
 	if(DespiteTheme::Button(Ui(), TextRender(), &s_Quit, Quit, Localize("Quit"), false, FontIcon::XMARK) || Escape || CheckHotKey(KEY_Q))
@@ -90,7 +90,7 @@ void CMenusStart::RenderStartMenu(CUIRect MainView)
 	if(DespiteTheme::Link(Ui(), TextRender(), &s_Console, Link, TCLocalize("Console")))
 		GameClient()->m_GameConsole.Toggle(CGameConsole::CONSOLETYPE_LOCAL);
 	if(DespiteTheme::Link(Ui(), TextRender(), &s_Source, Footer, "GitHub"))
-		Client()->ViewLink("https://github.com/privetpixel-sudo/despite-tater");
+		Client()->ViewLink("https://github.com/privetpixel-sudo/releasse");
 	CUIRect Version = {MainView.x, MainView.y + MainView.h - 18.0f, MainView.w, 14.0f};
 	TextRender()->TextColor(DespiteTheme::Muted());
 	Ui()->DoLabel(&Version, CLIENT_RELEASE_VERSION " / TClient " TCLIENT_VERSION, 9.0f, TEXTALIGN_MR);

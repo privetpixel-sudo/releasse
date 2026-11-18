@@ -790,7 +790,7 @@ void CPlayers::RenderPlayer(
 	if(!RenderGhost && in_range(ClientId, 0, MAX_CLIENTS - 1))
 	{
 		auto &Hammer = GameClient()->m_aClients[ClientId].m_aDespiteHammer[g_Config.m_ClDummy];
-		if(Player.m_Weapon == WEAPON_HAMMER && DespiteAntipingEnabled(g_Config) && g_Config.m_TcDespiteSmoothness > 0 &&
+		if(Player.m_Weapon == WEAPON_HAMMER && DespiteAntipingEnabled(g_Config) && GameClient()->DespiteSmoothness() > 0 &&
 			Client()->State() == IClient::STATE_ONLINE && GameClient()->m_aClients[ClientId].m_IsPredicted)
 		{
 			const auto &Tuning = GameClient()->m_aClients[ClientId].m_RegularPredicted.m_Tuning;

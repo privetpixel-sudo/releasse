@@ -343,7 +343,7 @@ void CMenus::RenderSettingsTClient(CUIRect MainView)
 		TCLocalize("Chat Binds"),
 		TCLocalize("Status Bar"),
 		TCLocalize("Info"),
-		"Ðespiтe"};
+		"releasse"};
 
 	for(int Tab = 0; Tab < NUMBER_OF_TCLIENT_TABS; ++Tab)
 	{

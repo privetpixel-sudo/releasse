@@ -1,4 +1,4 @@
-name: Despite build and tests
+name: releasse build and tests
 
 on:
   push:
@@ -30,7 +30,7 @@ jobs:
       - name: Upload testable client
         uses: actions/upload-artifact@v4
         with:
-          name: despite-tater-windows
+          name: releasse-windows
           path: |
             build/DDNet.exe
             build/DDNet-Server.exe

@@ -792,7 +792,11 @@ public:
 	CGameWorld m_ExtraPredictedWorld;
 	CGameWorld m_PredSmoothingWorld;
 	std::array<CDespiteAntiping, NUM_DUMMIES> m_aDespiteAntiping;
+	std::array<CDespiteAutoPing, NUM_DUMMIES> m_aDespiteAutoPing;
 	std::array<int, NUM_DUMMIES> m_aDespiteBlendTick;
+	void UpdateDespiteAutoPing();
+	int DespiteProfile() const { return DespiteRuntimeProfile(g_Config, m_aDespiteAutoPing[g_Config.m_ClDummy]); }
+	int DespiteSmoothness() const { return DespiteRuntimeSmoothness(g_Config, m_aDespiteAutoPing[g_Config.m_ClDummy]); }
 
 	std::vector<SSwitchers> &Switchers() { return m_GameWorld.m_Core.m_vSwitchers; }
 	std::vector<SSwitchers> &PredSwitchers() { return m_PredictedWorld.m_Core.m_vSwitchers; }

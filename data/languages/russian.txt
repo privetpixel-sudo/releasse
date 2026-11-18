@@ -2695,3 +2695,9 @@ No country flags match your filter criteria
 
 Ping preset (ms)
 == Пресет пинга (мс)
+
+Auto ping
+== Авто
+
+Auto ping: waiting for live latency
+== Авто: ожидание замеров пинга

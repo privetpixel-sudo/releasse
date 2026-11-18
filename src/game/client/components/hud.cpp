@@ -1990,11 +1990,22 @@ void CHud::RenderDespiteAntiping()
 		return;
 	const bool Active = DespiteAntipingEnabled(g_Config) && GameClient()->Predict() && GameClient()->AntiPingPlayers();
 	const auto &Filter = GameClient()->m_aDespiteAntiping[g_Config.m_ClDummy];
+	const auto &Auto = GameClient()->m_aDespiteAutoPing[g_Config.m_ClDummy];
 	char aText[128];
-	if(Active)
-		str_format(aText, sizeof(aText), "Ðespiтe  |  %.1f ms  |  %.2fx", Filter.JitterMs(), Filter.RecoveryScale(g_Config.m_TcDespiteProfile));
+	if(Active && g_Config.m_TcDespiteAutoPing && Auto.Ready() && !Client()->ConnectionProblems())
+	{
+		const int LocalId = GameClient()->m_Snap.m_LocalClientId;
+		const auto *pInfo = in_range(LocalId, 0, MAX_CLIENTS - 1) ? GameClient()->m_Snap.m_apPlayerInfos[LocalId] : nullptr;
+		char aPreset[8];
+		str_format(aPreset, sizeof(aPreset), "%d%s", Auto.Preset() == 9 ? 100 : 20 + 10 * Auto.Preset(), Auto.Preset() == 9 ? "+" : "");
+		str_format(aText, sizeof(aText), "releasse  |  %s %s  |  %d ms  |  %d%%", TCLocalize("Auto ping"), aPreset, pInfo ? pInfo->m_Latency : 0, Auto.Smoothness());
+	}
+	else if(Active && g_Config.m_TcDespiteAutoPing)
+		str_format(aText, sizeof(aText), "releasse  |  %s", TCLocalize("Auto ping: waiting for live latency"));
+	else if(Active)
+		str_format(aText, sizeof(aText), "releasse  |  %.1f ms  |  %.2fx", Filter.JitterMs(), Filter.RecoveryScale(GameClient()->DespiteProfile()));
 	else
-		str_format(aText, sizeof(aText), "Ðespiтe  |  %s", TCLocalize("Inactive"));
+		str_format(aText, sizeof(aText), "releasse  |  %s", TCLocalize("Inactive"));
 	const float Width = TextRender()->TextWidth(5.0f, aText) + 12.0f;
 	const float Bottom = m_Height - (g_Config.m_TcStatusBar ? g_Config.m_TcStatusBarHeight : 0.0f);
 	CUIRect Rect = {m_Width / 2.0f - Width / 2.0f, Bottom - 16.0f, Width, 11.0f};

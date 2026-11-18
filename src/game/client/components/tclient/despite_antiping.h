@@ -10,6 +10,87 @@
 #include <cmath>
 #include <cstdint>
 
+inline int DespitePresetStrength(int Preset)
+{
+	constexpr std::array<int, 9> aStrengths = {35, 42, 50, 58, 66, 74, 82, 90, 100};
+	return aStrengths[std::clamp(Preset, 1, 9) - 1];
+}
+
+inline int DespitePresetProfile(int Preset)
+{
+	return Preset <= 3 ? 0 : (Preset == 9 ? 2 : 1);
+}
+
+// Uses server-reported local-player latency, independently of prediction margin.
+// Runtime values never overwrite the user's saved manual profile/strength.
+class CDespiteAutoPing
+{
+	int m_LastTick = -1;
+	int m_Preset = 0;
+	int m_PendingPreset = 0;
+	float m_PendingSeconds = 0.0f;
+	float m_PingMs = 0.0f;
+	float m_LastPingMs = 0.0f;
+	float m_VariationMs = 0.0f;
+	float m_Strength = 0.0f;
+
+public:
+	void Reset() { *this = CDespiteAutoPing(); }
+	bool Ready() const { return m_Preset != 0; }
+	int Preset() const { return m_Preset; }
+	int Profile() const { return DespitePresetProfile(m_Preset); }
+	int Smoothness() const { return std::clamp(static_cast<int>(std::round(m_Strength)), 0, 100); }
+	float PingMs() const { return m_PingMs; }
+
+	void Observe(int Tick, int TickSpeed, int PingMs, float PredictionJitterMs)
+	{
+		if(Tick < 0 || TickSpeed <= 0 || PingMs < 0)
+		{
+			Reset();
+			return;
+		}
+		if(Tick == m_LastTick)
+			return;
+		const float Sample = static_cast<float>(std::clamp(PingMs, 0, 800));
+		const int64_t Ticks = static_cast<int64_t>(Tick) - m_LastTick;
+		if(!Ready() || Ticks < 0 || Ticks > static_cast<int64_t>(TickSpeed) * 2)
+		{
+			Reset();
+			m_LastTick = Tick;
+			m_PingMs = m_LastPingMs = Sample;
+			m_Preset = std::clamp(static_cast<int>((Sample - 25.0f) / 10.0f) + 1, 1, 9);
+			m_Strength = static_cast<float>(DespitePresetStrength(m_Preset));
+			return;
+		}
+		const float Seconds = static_cast<float>(Ticks) / TickSpeed;
+		m_LastTick = Tick;
+		m_PingMs += (Sample - m_PingMs) * (1.0f - std::exp(-Seconds / 0.75f));
+		m_VariationMs += (std::abs(Sample - m_LastPingMs) - m_VariationMs) * (1.0f - std::exp(-Seconds / 0.8f));
+		m_LastPingMs = Sample;
+		int Target = std::clamp(static_cast<int>((m_PingMs - 25.0f) / 10.0f) + 1, 1, 9);
+		const float Center = 20.0f + 10.0f * m_Preset;
+		if((Target > m_Preset && m_PingMs <= Center + 8.0f) || (Target < m_Preset && m_PingMs >= Center - 8.0f))
+			Target = m_Preset;
+		if(Target == m_Preset || Target != m_PendingPreset)
+		{
+			m_PendingPreset = Target;
+			m_PendingSeconds = 0.0f;
+		}
+		else
+		{
+			m_PendingSeconds += Seconds;
+			if(m_PendingSeconds >= (Target > m_Preset ? 1.0f : 2.5f))
+			{
+				m_Preset = Target;
+				m_PendingSeconds = 0.0f;
+			}
+		}
+		const float PredictionVariation = std::isfinite(PredictionJitterMs) ? std::clamp(PredictionJitterMs, 0.0f, 40.0f) : 0.0f;
+		const float TargetStrength = std::min(100.0f, DespitePresetStrength(m_Preset) + std::clamp((m_VariationMs + PredictionVariation) * 0.25f, 0.0f, 10.0f));
+		m_Strength += (TargetStrength - m_Strength) * (1.0f - std::exp(-Seconds / 0.6f));
+	}
+};
+
 // Samples prediction horizon, not network RTT. One sample per server tick keeps
 // adaptation independent of rendering FPS. No simulation or packet data is changed.
 class CDespiteAntiping
@@ -134,6 +215,7 @@ inline float DespiteEffectiveConfidence(float Confidence, float InteractionPrior
 inline void ApplyDespiteAntipingPreset(CConfig &Config, int Profile)
 {
 	Config.m_TcDespiteAntiping = 1;
+	Config.m_TcDespiteAutoPing = 0;
 	Config.m_TcDespitePingPreset = 0;
 	Config.m_TcDespiteProfile = std::clamp(Profile, 0, 2);
 	Config.m_ClPredict = 1;
@@ -155,12 +237,10 @@ inline void ApplyDespiteAntipingPreset(CConfig &Config, int Profile)
 
 inline void ApplyDespitePingPreset(CConfig &Config, int Preset)
 {
-	constexpr std::array<int, 9> aStrengths = {35, 42, 50, 58, 66, 74, 82, 90, 100};
 	Preset = std::clamp(Preset, 1, 9);
-	ApplyDespiteAntipingPreset(Config, Preset <= 3 ? 0 : Preset == 9 ? 2 :
-									   1);
+	ApplyDespiteAntipingPreset(Config, DespitePresetProfile(Preset));
 	Config.m_TcDespitePingPreset = Preset;
-	Config.m_TcDespiteSmoothness = aStrengths[Preset - 1];
+	Config.m_TcDespiteSmoothness = DespitePresetStrength(Preset);
 	Config.m_ClPredictDummy = 1;
 	Config.m_ClPredictEvents = 1;
 	Config.m_ClSubTickAiming = 1;
@@ -175,6 +255,18 @@ inline void ApplyDespitePingPreset(CConfig &Config, int Preset)
 inline void ApplyDespiteHighPingPreset(CConfig &Config)
 {
 	ApplyDespitePingPreset(Config, 8);
+}
+
+inline void ApplyDespiteAutoPing(CConfig &Config)
+{
+	const int Profile = Config.m_TcDespiteProfile;
+	const int Smoothness = Config.m_TcDespiteSmoothness;
+	const int Preset = Config.m_TcDespitePingPreset;
+	ApplyDespitePingPreset(Config, 8);
+	Config.m_TcDespiteProfile = Profile;
+	Config.m_TcDespiteSmoothness = Smoothness;
+	Config.m_TcDespitePingPreset = Preset;
+	Config.m_TcDespiteAutoPing = 1;
 }
 
 class CDespiteHammerAnimation
@@ -217,6 +309,28 @@ inline bool DespiteAntipingEnabled(const CConfig &Config)
 {
 	return Config.m_TcDespiteAntiping && Config.m_ClPredict && Config.m_ClAntiPing &&
 	       Config.m_ClAntiPingPlayers && Config.m_TcAntiPingImproved && !Config.m_ClAntiPingSmooth;
+}
+
+inline int DespiteRuntimeProfile(const CConfig &Config, const CDespiteAutoPing &Auto)
+{
+	return Config.m_TcDespiteAutoPing && DespiteAntipingEnabled(Config) && Auto.Ready() ? Auto.Profile() : Config.m_TcDespiteProfile;
+}
+
+inline int DespiteRuntimeSmoothness(const CConfig &Config, const CDespiteAutoPing &Auto)
+{
+	return Config.m_TcDespiteAutoPing && DespiteAntipingEnabled(Config) && Auto.Ready() ? Auto.Smoothness() : Config.m_TcDespiteSmoothness;
+}
+
+inline void SetDespiteManualSmoothness(CConfig &Config, const CDespiteAutoPing &Auto, int Smoothness)
+{
+	if(Config.m_TcDespiteAutoPing && DespiteAntipingEnabled(Config) && Auto.Ready())
+	{
+		Config.m_TcDespiteProfile = Auto.Profile();
+		Config.m_TcAntiPingNegativeBuffer = Auto.Profile() == 2 ? 1 : 0;
+	}
+	Config.m_TcDespiteAutoPing = 0;
+	Config.m_TcDespitePingPreset = 0;
+	Config.m_TcDespiteSmoothness = std::clamp(Smoothness, 0, 100);
 }
 
 #endif // GAME_CLIENT_COMPONENTS_TCLIENT_DESPITE_ANTIPING_H

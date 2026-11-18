@@ -648,6 +648,8 @@ void CGameClient::OnReset()
 	InvalidateSnapshot();
 	for(auto &Antiping : m_aDespiteAntiping)
 		Antiping.Reset();
+	for(auto &Auto : m_aDespiteAutoPing)
+		Auto.Reset();
 	m_aDespiteBlendTick.fill(-1);
 
 	m_EditorMovementDelay = 5;
@@ -802,8 +804,28 @@ void CGameClient::UpdatePositions()
 	UpdateRenderedCharacters();
 }
 
+void CGameClient::UpdateDespiteAutoPing()
+{
+	if(!g_Config.m_TcDespiteAutoPing || !DespiteAntipingEnabled(g_Config) || Client()->State() != IClient::STATE_ONLINE)
+	{
+		for(auto &Auto : m_aDespiteAutoPing)
+			Auto.Reset();
+		return;
+	}
+	auto &Auto = m_aDespiteAutoPing[g_Config.m_ClDummy];
+	if(Client()->ConnectionProblems())
+		return; // Hold tuning during packet loss; no fresh latency is available.
+	const int LocalId = m_Snap.m_LocalClientId;
+	const auto *pInfo = in_range(LocalId, 0, MAX_CLIENTS - 1) ? m_Snap.m_apPlayerInfos[LocalId] : nullptr;
+	if(pInfo)
+		Auto.Observe(Client()->GameTick(g_Config.m_ClDummy), Client()->GameTickSpeed(), pInfo->m_Latency, m_aDespiteAntiping[g_Config.m_ClDummy].JitterMs());
+	else
+		Auto.Reset();
+}
+
 void CGameClient::OnRender()
 {
+	UpdateDespiteAutoPing();
 	const ColorRGBA ClearColor = color_cast<ColorRGBA>(ColorHSLA(g_Config.m_ClOverlayEntities ? g_Config.m_ClBackgroundEntitiesColor : g_Config.m_ClBackgroundColor));
 	Graphics()->Clear(ClearColor.r, ClearColor.g, ClearColor.b);
 
@@ -936,6 +958,8 @@ void CGameClient::OnRender()
 
 void CGameClient::OnDummyDisconnect()
 {
+	m_aDespiteAutoPing[1].Reset();
+	m_aDespiteAntiping[1].Reset();
 	m_aLocalIds[1] = -1;
 	m_aDDRaceMsgSent[1] = false;
 	m_aShowOthers[1] = SHOW_OTHERS_NOT_SET;
@@ -2708,6 +2732,7 @@ void CGameClient::ApplyPreInputs(int Tick, bool Direct, CGameWorld &GameWorld)
 
 void CGameClient::OnPredict()
 {
+	UpdateDespiteAutoPing();
 	// store the previous values so we can detect prediction errors
 	CCharacterCore BeforePrevChar = m_PredictedPrevChar;
 	CCharacterCore BeforeChar = m_PredictedChar;
@@ -3244,11 +3269,12 @@ void CGameClient::OnPredict()
 			// Manage uncertainty value
 			float PredTimeScale = (float)g_Config.m_TcAntiPingUncertaintyScale / 100.0f;
 			if(UseDespiteAntiping)
-				PredTimeScale = DespiteAntiping.RecoveryScale(g_Config.m_TcDespiteProfile);
+				PredTimeScale = DespiteAntiping.RecoveryScale(DespiteProfile());
 			float TickSize = TickDuration / (static_cast<float>(std::max(PredTime, 1)) * PredTimeScale);
 			float PrevConfidence = 1.0f - m_aClients[i].m_Uncertainty;
 			float NewConfidence = PrevConfidence - Uncertainty + TickSize;
-			float MinConfidence = g_Config.m_TcAntiPingNegativeBuffer ? -1.0f : 0.0f;
+			const bool NegativeBuffer = UseDespiteAntiping && g_Config.m_TcDespiteAutoPing ? DespiteProfile() == 2 : g_Config.m_TcAntiPingNegativeBuffer != 0;
+			float MinConfidence = NegativeBuffer ? -1.0f : 0.0f;
 			NewConfidence = std::clamp(NewConfidence, MinConfidence, 1.0f); // A certain about of "negative buffer" is allowed
 			m_aClients[i].m_Uncertainty = 1.0f - NewConfidence;
 			NewConfidence = std::max(0.0f, NewConfidence);
@@ -3287,7 +3313,7 @@ void CGameClient::OnPredict()
 			if(UseDespiteAntiping)
 			{
 				Weights = mix(Weights, vec2(1, 1), InteractionPriority);
-				Weights = Blend.Update(Weights, BlendSeconds, g_Config.m_TcDespiteProfile, DespiteAntiping.JitterMs(), g_Config.m_TcDespiteSmoothness);
+				Weights = Blend.Update(Weights, BlendSeconds, DespiteProfile(), DespiteAntiping.JitterMs(), DespiteSmoothness());
 				Weights = mix(Weights, vec2(1, 1), InteractionPriority);
 			}
 			else
@@ -3309,7 +3335,7 @@ void CGameClient::OnPredict()
 			{
 				const float ConfidenceWeight = std::min(Weights.x, Weights.y);
 				const vec2 Offset = Correction.Update((PredPos - PrevPredPos) * ConfidenceWeight, BlendSeconds, PredTime,
-					DespiteAntiping.JitterMs(), g_Config.m_TcDespiteSmoothness, InteractionPriority, ComparableCorrection);
+					DespiteAntiping.JitterMs(), DespiteSmoothness(), InteractionPriority, ComparableCorrection);
 				vec2 Candidate = ConfidencePos + Offset;
 				Candidate.x = std::clamp(Candidate.x, MinPos.x, MaxPos.x);
 				Candidate.y = std::clamp(Candidate.y, MinPos.y, MaxPos.y);
