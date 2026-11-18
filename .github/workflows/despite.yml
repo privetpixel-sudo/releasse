@@ -1,0 +1,39 @@
+name: Despite build and tests
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: despite-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - uses: Swatinem/rust-cache@v2
+      - name: Configure
+        run: cmake -S . -B build -A x64 -DCMAKE_BUILD_TYPE=Release -DDOWNLOAD_GTEST=ON -DAUTOUPDATE=OFF -DVULKAN=OFF -DVIDEORECORDER=OFF '-DCMAKE_POLICY_VERSION_MINIMUM=3.5' -DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=.
+      - name: Build client
+        run: cmake --build build --config Release --target game-client --parallel 4
+      - name: Run all tests
+        run: cmake --build build --config Release --target run_tests --parallel 4
+      - name: Upload testable client
+        uses: actions/upload-artifact@v4
+        with:
+          name: despite-tater-windows
+          path: |
+            build/DDNet.exe
+            build/*.dll
+            build/data
+            license.txt
+            README.md
+          if-no-files-found: error

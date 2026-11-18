@@ -1,9 +1,7 @@
 name: Fast Build
 
 on:
-  push:
-    branches-ignore:
-      - gh-readonly-queue/**
+  workflow_dispatch:
 
 jobs:
   build-cmake:

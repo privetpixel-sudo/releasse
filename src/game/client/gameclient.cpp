@@ -646,6 +646,8 @@ void CGameClient::OnConnected()
 void CGameClient::OnReset()
 {
 	InvalidateSnapshot();
+	for(auto &Antiping : m_aDespiteAntiping)
+		Antiping.Reset();
 
 	m_EditorMovementDelay = 5;
 
@@ -3048,6 +3050,12 @@ void CGameClient::OnPredict()
 
 	// TClient
 	// New antiping smoothing
+	auto &DespiteAntiping = m_aDespiteAntiping[g_Config.m_ClDummy];
+	const bool UseDespiteAntiping = DespiteAntipingEnabled(g_Config);
+	if(UseDespiteAntiping && Predict() && m_NewTick)
+		DespiteAntiping.Observe(Client()->GameTick(g_Config.m_ClDummy), Client()->GetPredictionTime());
+	else if(!UseDespiteAntiping)
+		DespiteAntiping.Reset();
 	CCharacter *pSmoothLocalChar = m_PredSmoothingWorld.GetCharacterById(m_Snap.m_LocalClientId);
 	if(g_Config.m_TcAntiPingImproved &&
 		Predict() && AntiPingPlayers() &&
@@ -3217,7 +3225,9 @@ void CGameClient::OnPredict()
 
 			// Manage uncertainty value
 			float PredTimeScale = (float)g_Config.m_TcAntiPingUncertaintyScale / 100.0f;
-			float TickSize = TickDuration / ((float)PredTime * PredTimeScale); // 20ms / PredTime
+			if(UseDespiteAntiping)
+				PredTimeScale = DespiteAntiping.RecoveryScale(g_Config.m_TcDespiteProfile);
+			float TickSize = TickDuration / (static_cast<float>(std::max(PredTime, 1)) * PredTimeScale);
 			float PrevConfidence = 1.0f - m_aClients[i].m_Uncertainty;
 			float NewConfidence = PrevConfidence - Uncertainty + TickSize;
 			float MinConfidence = g_Config.m_TcAntiPingNegativeBuffer ? -1.0f : 0.0f;

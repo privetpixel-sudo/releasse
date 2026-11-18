@@ -67,6 +67,11 @@ MACRO_CONFIG_INT(TcAntiPingNegativeBuffer, tc_antiping_negative_buffer, 0, 0, 1,
 MACRO_CONFIG_INT(TcAntiPingStableDirection, tc_antiping_stable_direction, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Predicts optimistically along the tees stable axis to reduce delay in gaining overall stability")
 MACRO_CONFIG_INT(TcAntiPingUncertaintyScale, tc_antiping_uncertainty_scale, 150, 25, 400, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Determines uncertainty duration as a factor of ping, 100 = 1.0")
 
+// Ðespiтe Tater: opt in through the dedicated TClient subtab.
+MACRO_CONFIG_INT(TcDespiteAntiping, tc_despite_antiping, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Adapt improved antiping recovery to prediction-time jitter")
+MACRO_CONFIG_INT(TcDespiteProfile, tc_despite_profile, 1, 0, 2, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Despite antiping profile (0 = responsive, 1 = balanced, 2 = smooth)")
+MACRO_CONFIG_INT(TcDespiteHud, tc_despite_hud, 1, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Show the Despite antiping status in the game HUD")
+
 MACRO_CONFIG_INT(TcColorFreeze, tc_color_freeze, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Use skin colors for frozen tees")
 MACRO_CONFIG_INT(TcColorFreezeDarken, tc_color_freeze_darken, 90, 0, 100, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Makes color of tees darker when in freeze (0-100)")
 MACRO_CONFIG_INT(TcColorFreezeFeet, tc_color_freeze_feet, 0, 0, 1, CFGFLAG_CLIENT | CFGFLAG_SAVE, "Also use color for frozen tee feet")

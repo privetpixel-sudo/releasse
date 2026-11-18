@@ -44,6 +44,7 @@ enum
 	TCLIENT_TAB_BINDCHAT,
 	TCLIENT_TAB_STATUSBAR,
 	TCLIENT_TAB_INFO,
+	TCLIENT_TAB_DESPITE,
 	NUMBER_OF_TCLIENT_TABS
 };
 
@@ -324,7 +325,7 @@ void CMenus::RenderSettingsTClient(CUIRect MainView)
 	int TabCount = NUMBER_OF_TCLIENT_TABS;
 	for(int Tab = 0; Tab < NUMBER_OF_TCLIENT_TABS; ++Tab)
 	{
-		if(IsFlagSet(g_Config.m_TcTClientSettingsTabs, Tab))
+		if(Tab < TCLIENT_TAB_INFO && IsFlagSet(g_Config.m_TcTClientSettingsTabs, Tab))
 		{
 			TabCount--;
 			if(s_CurCustomTab == Tab)
@@ -341,11 +342,12 @@ void CMenus::RenderSettingsTClient(CUIRect MainView)
 		TCLocalize("War List"),
 		TCLocalize("Chat Binds"),
 		TCLocalize("Status Bar"),
-		TCLocalize("Info")};
+		TCLocalize("Info"),
+		"Ðespiтe"};
 
 	for(int Tab = 0; Tab < NUMBER_OF_TCLIENT_TABS; ++Tab)
 	{
-		if(IsFlagSet(g_Config.m_TcTClientSettingsTabs, Tab))
+		if(Tab < TCLIENT_TAB_INFO && IsFlagSet(g_Config.m_TcTClientSettingsTabs, Tab))
 			continue;
 
 		TabBar.VSplitLeft(TabWidth, &Button, &TabBar);
@@ -369,6 +371,8 @@ void CMenus::RenderSettingsTClient(CUIRect MainView)
 		RenderSettingsTClientStatusBar(MainView);
 	if(s_CurCustomTab == TCLIENT_TAB_INFO)
 		RenderSettingsTClientInfo(MainView);
+	if(s_CurCustomTab == TCLIENT_TAB_DESPITE)
+		RenderSettingsDespite(MainView);
 }
 
 void CMenus::RenderSettingsTClientSettings(CUIRect MainView)
@@ -2288,7 +2292,7 @@ void CMenus::RenderSettingsTClientInfo(CUIRect MainView)
 		TCLocalize("Status Bar"),
 		TCLocalize("Info")};
 	static int s_aShowTabs[NUMBER_OF_TCLIENT_TABS] = {};
-	for(int i = 0; i < NUMBER_OF_TCLIENT_TABS - 1; ++i)
+	for(int i = 0; i < TCLIENT_TAB_INFO; ++i)
 	{
 		DoButton_CheckBoxAutoVMarginAndSet(&s_aShowTabs[i], apTabNames[i], &s_aShowTabs[i], i % 2 == 0 ? &LeftSettings : &RightSettings, LineSize);
 		SetFlag(g_Config.m_TcTClientSettingsTabs, i, s_aShowTabs[i]);

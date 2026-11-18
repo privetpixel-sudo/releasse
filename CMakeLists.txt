@@ -2880,6 +2880,8 @@ if(CLIENT)
     components/tclient/custom_communities.cpp
     components/tclient/custom_communities.h
     components/tclient/data_version.h
+    components/tclient/despite_antiping.h
+    components/tclient/menus_despite.cpp
     components/tclient/menus_tclient.cpp
     components/tclient/mod.cpp
     components/tclient/mod.h
@@ -3631,6 +3633,7 @@ if((GTEST_FOUND OR DOWNLOAD_GTEST) AND SERVER)
     csv_test.cpp
     datafile_test.cpp
     dbg_test.cpp
+    despite_antiping_test.cpp
     editor_test.cpp
     fs_test.cpp
     gameworld_test.cpp

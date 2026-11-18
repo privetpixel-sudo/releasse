@@ -1984,6 +1984,26 @@ void CHud::OnNewSnapshot()
 	}
 }
 
+void CHud::RenderDespiteAntiping()
+{
+	if(!g_Config.m_TcDespiteHud || !g_Config.m_TcDespiteAntiping || Client()->State() != IClient::STATE_ONLINE)
+		return;
+	const bool Active = DespiteAntipingEnabled(g_Config) && GameClient()->Predict() && GameClient()->AntiPingPlayers();
+	const auto &Filter = GameClient()->m_aDespiteAntiping[g_Config.m_ClDummy];
+	char aText[128];
+	if(Active)
+		str_format(aText, sizeof(aText), "Ðespiтe  |  %.1f ms  |  %.2fx", Filter.JitterMs(), Filter.RecoveryScale(g_Config.m_TcDespiteProfile));
+	else
+		str_format(aText, sizeof(aText), "Ðespiтe  |  %s", TCLocalize("Inactive"));
+	const float Width = TextRender()->TextWidth(5.0f, aText) + 12.0f;
+	const float Bottom = m_Height - (g_Config.m_TcStatusBar ? g_Config.m_TcStatusBarHeight : 0.0f);
+	CUIRect Rect = {m_Width / 2.0f - Width / 2.0f, Bottom - 16.0f, Width, 11.0f};
+	Rect.Draw(ColorRGBA(0.055f, 0.10f, 0.18f, 0.85f), IGraphics::CORNER_ALL, 3.0f);
+	TextRender()->TextColor(Active ? ColorRGBA(0.32f, 0.86f, 0.82f, 1.0f) : ColorRGBA(0.73f, 0.82f, 0.90f, 1.0f));
+	TextRender()->Text(Rect.x + 6.0f, Rect.y + 3.0f, 5.0f, aText);
+	TextRender()->TextColor(TextRender()->DefaultTextColor());
+}
+
 void CHud::OnRender()
 {
 	if(Client()->State() != IClient::STATE_ONLINE && Client()->State() != IClient::STATE_DEMOPLAYBACK)
@@ -2044,6 +2064,7 @@ void CHud::OnRender()
 		RenderDummyActions();
 		RenderWarmupTimer();
 		RenderTextInfo();
+		RenderDespiteAntiping();
 		GameClient()->m_TClient.RenderCenterLines();
 		RenderLocalTime((m_Width / 7) * 3);
 		if(Client()->State() != IClient::STATE_DEMOPLAYBACK)
